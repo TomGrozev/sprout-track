@@ -31,6 +31,11 @@ import './sleep-form.css';
 
 import { DEFAULT_SLEEP_LOCATIONS } from '@/src/constants/sleepLocations';
 import { localizeSleepLocation } from '@/src/utils/sleepLocationUtils';
+import {
+  applyMove,
+  closeOpenSegments,
+  LocationSegmentInput,
+} from '@/src/utils/sleepSegments';
 
 // Not used for display — labels go through localizeSleepLocation. This is only
 // the default-vs-custom lookup used when initializing the form's location state.
@@ -91,6 +96,14 @@ export default function SleepForm({
   const [isCustomLocation, setIsCustomLocation] = useState(false);
   const [customLocationInput, setCustomLocationInput] = useState('');
   const [showLocationManager, setShowLocationManager] = useState(false);
+  // In-progress sleep being moved between locations (issue #4): identity plus
+  // the timeline as last known, so "moved to X" can close/open segments.
+  const [movingSleep, setMovingSleep] = useState<{
+    id: string;
+    segments: LocationSegmentInput[];
+  } | null>(null);
+  // Editable copies of an existing sleep's segments (edit mode).
+  const [editedSegments, setEditedSegments] = useState<LocationSegmentInput[]>([]);
 
   // One call returns defaults + customs, already in the family's saved order,
   // each flagged with hidden/isDefault.
@@ -154,7 +167,7 @@ export default function SleepForm({
           if (!isNaN(startDate.getTime())) {
             setStartDateTime(startDate);
           }
-          
+
           if (activity.endTime) {
             const endDate = new Date(activity.endTime);
             if (!isNaN(endDate.getTime())) {
@@ -166,10 +179,24 @@ export default function SleepForm({
         } catch (error) {
           console.error('Error parsing activity times:', error);
         }
-        
+
         const activityLocation = activity.location || '';
         const isDefaultLocation = activityLocation && DEFAULT_LOCATIONS.includes(activityLocation);
-        
+
+        // Editable copy of the stored segment timeline (issue #4). Legacy
+        // sleeps without segments derive the single segment from the row.
+        setEditedSegments(
+          Array.isArray(activity.locationSegments) && activity.locationSegments.length > 0
+            ? activity.locationSegments.map((segment) => ({
+              location: segment.location,
+              startTime: segment.startTime,
+              endTime: segment.endTime,
+            }))
+            : (activityLocation
+              ? [{ location: activityLocation, startTime: activity.startTime, endTime: activity.endTime }]
+              : []),
+        );
+
         // Check if it's a custom location that will be in the dropdown (fetched from API)
         // We'll set it after locations are fetched, but for now set it directly
         // The locations list will be populated by the useEffect that runs when isOpen is true
@@ -204,7 +231,7 @@ export default function SleepForm({
           setIsCustomLocation(false);
           setCustomLocationInput('');
         }
-        
+
         // Mark as initialized
         setIsInitialized(true);
       } else if (isSleeping && babyId) {
@@ -221,19 +248,29 @@ export default function SleepForm({
               }
             });
             if (!response.ok) return;
-            
+
             const data = await response.json();
             if (!data.success) return;
-            
+
             // Find the most recent sleep record without an end time
             const currentSleep = data.data.find((log: SleepLogResponse) => !log.endTime);
             if (currentSleep) {
+              // Track the in-progress sleep's segment timeline so the location
+              // Select can record moves against it.
+              setMovingSleep({
+                id: currentSleep.id,
+                segments: Array.isArray(currentSleep.locationSegments) && currentSleep.locationSegments.length > 0
+                  ? currentSleep.locationSegments
+                  : (currentSleep.location
+                    ? [{ location: currentSleep.location, startTime: currentSleep.startTime, endTime: null }]
+                    : []),
+              });
               try {
                 const startDate = new Date(currentSleep.startTime);
                 if (!isNaN(startDate.getTime())) {
                   setStartDateTime(startDate);
                 }
-                
+
                 const endDate = new Date(initialTime);
                 if (!isNaN(endDate.getTime())) {
                   setEndDateTime(endDate);
@@ -241,10 +278,10 @@ export default function SleepForm({
               } catch (error) {
                 console.error('Error parsing sleep times:', error);
               }
-              
+
               const sleepLocation = currentSleep.location || '';
               const isCustom = sleepLocation && !DEFAULT_LOCATIONS.includes(sleepLocation);
-              
+
               setFormData(prev => ({
                 ...prev,
                 type: currentSleep.type,
@@ -252,7 +289,7 @@ export default function SleepForm({
                 quality: 'GOOD', // Default to GOOD when ending sleep
                 notes: currentSleep.notes || '',
               }));
-              
+
               if (isCustom) {
                 setIsCustomLocation(true);
                 setCustomLocationInput(sleepLocation);
@@ -261,7 +298,7 @@ export default function SleepForm({
                 setCustomLocationInput('');
               }
             }
-            
+
             // Mark as initialized
             setIsInitialized(true);
           } catch (error) {
@@ -278,7 +315,7 @@ export default function SleepForm({
           if (!isNaN(initialDate.getTime())) {
             setStartDateTime(initialDate);
           }
-          
+
           if (isSleeping) {
             setEndDateTime(new Date(initialTime));
           } else {
@@ -287,20 +324,22 @@ export default function SleepForm({
         } catch (error) {
           console.error('Error parsing initialTime:', error);
         }
-        
+
         setFormData(prev => ({
           ...prev,
           type: prev.type || 'NAP', // Default to NAP if not set
           location: prev.location,
           quality: isSleeping ? 'GOOD' : prev.quality,
         }));
-        
+
         // Mark as initialized
         setIsInitialized(true);
       }
     } else if (!isOpen) {
       // Reset initialization flag and form when modal closes
       setIsInitialized(false);
+      setMovingSleep(null);
+      setEditedSegments([]);
       try {
         const initialDate = new Date(initialTime);
         if (!isNaN(initialDate.getTime())) {
@@ -325,9 +364,65 @@ export default function SleepForm({
   const handleStartDateTimeChange = (date: Date) => {
     setStartDateTime(date);
   };
-  
+
   const handleEndDateTimeChange = (date: Date) => {
     setEndDateTime(date);
+  };
+
+  /** Records "moved to <location>" on the in-progress sleep: closes the open
+    *  segment now, opens the next one, and mirrors the new primary location. */
+  const handleMoveLocation = async (location: string) => {
+    if (!movingSleep || loading) return;
+    setLoading(true);
+    try {
+      const moveTime = toUTCString(new Date());
+      if (!moveTime) return;
+      const nextSegments = applyMove(movingSleep.segments, location, moveTime);
+      if (nextSegments === movingSleep.segments) {
+        // Same location or nothing open — nothing to record.
+        return;
+      }
+      const authToken = localStorage.getItem('authToken');
+      const response = await fetch(`/api/sleep-log?id=${movingSleep.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+        },
+        body: JSON.stringify({ locationSegments: nextSegments }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        showToast({
+          variant: 'error',
+          title: t('Error'),
+          message: errorData?.error || t('Failed to update sleep log'),
+          duration: 5000,
+        });
+        return;
+      }
+      setMovingSleep({ ...movingSleep, segments: nextSegments });
+      setFormData((prev) => ({ ...prev, location }));
+      setIsCustomLocation(false);
+      setCustomLocationInput('');
+      showToast({
+        variant: 'success',
+        title: t('Location updated'),
+        message: t('Moved to {{location}}').replace('{{location}}', localizeSleepLocation(location, t)),
+        duration: 3000,
+      });
+      onSuccess?.();
+    } catch (error) {
+      console.error('Error recording sleep location move:', error);
+      showToast({
+        variant: 'error',
+        title: t('Error'),
+        message: t('Failed to update sleep log'),
+        duration: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -359,35 +454,61 @@ export default function SleepForm({
     try {
       // Convert local times to UTC ISO strings using the timezone context
       const utcStartTime = toUTCString(startDateTime);
-      
+      if (!utcStartTime) {
+        console.error('Failed to convert start time');
+        return;
+      }
+
       // Only convert end time if it exists
       let utcEndTime = null;
       if (endDateTime) {
         utcEndTime = toUTCString(endDateTime);
+        if (!utcEndTime) {
+          console.error('Failed to convert end time');
+          return;
+        }
       }
-      
+
       console.log('Original start time (local):', startDateTime.toISOString());
       console.log('Converted start time (UTC):', utcStartTime);
       if (utcEndTime && endDateTime) {
         console.log('Original end time (local):', endDateTime.toISOString());
         console.log('Converted end time (UTC):', utcEndTime);
       }
-      
+
       // Calculate duration using the timezone context if both start and end times are provided
-      const duration = utcEndTime ? 
-        calculateDurationMinutes(utcStartTime, utcEndTime) : 
+      const duration = utcEndTime ?
+        calculateDurationMinutes(utcStartTime, utcEndTime) :
         null;
 
       let response;
-      
+
       if (activity) {
         // Editing mode - update existing record
+
+        // Segments (issue #4): when the sleep carries a timeline, send the edited
+        // one back. End/start times come from the shared pickers: the sleep's end
+        // closes the last segment; the start time moves the first segment's start.
+        let segmentPayload: LocationSegmentInput[] | undefined;
+        if (editedSegments.length > 1 || (editedSegments.length === 1 && formData.location)) {
+          // A wake time closes the trailing open segment; without one (still in
+          // progress) the timeline keeps its open tail.
+          const retimed = editedSegments.map((segment, index) =>
+            index === 0
+              ? { ...segment, startTime: utcStartTime }
+              : segment,
+          );
+          const rebuilt = utcEndTime ? closeOpenSegments(retimed, utcEndTime) : retimed;
+          segmentPayload = rebuilt;
+        }
+
         const payload = {
           startTime: utcStartTime,
           endTime: utcEndTime,
           duration,
           type: formData.type,
           location: locationValue,
+          ...(segmentPayload ? { locationSegments: segmentPayload } : {}),
           quality: formData.quality || null,
           notes: formData.notes || null,
         };
@@ -417,7 +538,7 @@ export default function SleepForm({
         if (!sleepResponse.ok) throw new Error(t('Failed to fetch sleep logs'));
         const sleepData = await sleepResponse.json();
         if (!sleepData.success) throw new Error(t('Failed to fetch sleep logs'));
-        
+
         const currentSleep = sleepData.data.find((log: SleepLogResponse) => !log.endTime);
         if (!currentSleep) throw new Error(t('No ongoing sleep record found'));
 
@@ -483,7 +604,7 @@ export default function SleepForm({
             throw new Error(errorData.error || t('Failed to save sleep log'));
           }
         }
-        
+
         // Handle other errors
         const errorData = await response.json();
         showToast({
@@ -498,7 +619,7 @@ export default function SleepForm({
       onClose();
       if (!activity) onSleepToggle(); // Only toggle sleep state when not editing
       onSuccess?.();
-      
+
       // Reset form data
       try {
         const initialDate = new Date(initialTime);
@@ -527,7 +648,7 @@ export default function SleepForm({
 
   const isEditMode = !!activity;
   const title = isEditMode ? t('Edit Sleep Record') : (isSleeping ? t('End Sleep Session') : t('Start Sleep Session'));
-  const description = isEditMode 
+  const description = isEditMode
     ? t('Update sleep record details')
     : (isSleeping ? t('Record when your baby woke up and how well they slept') : t('Record when your baby is going to sleep'));
 
@@ -538,33 +659,33 @@ export default function SleepForm({
       title={title}
       description={description}
     >
-        <FormPageContent>
-          <form onSubmit={handleSubmit}>
+      <FormPageContent>
+        <form onSubmit={handleSubmit}>
           <div className="space-y-4">
-          <div className="space-y-3">
-            <div>
-              <Label>{t('Start Time')}</Label>
-              <DateTimePicker
-                value={startDateTime}
-                onChange={handleStartDateTimeChange}
-                className="w-full"
-                disabled={(isSleeping && !isEditMode) || loading} // Only disabled when ending sleep and not editing
-                placeholder={t("Select start time...")}
-              />
-            </div>
-            {(isSleeping || isEditMode) && (
+            <div className="space-y-3">
               <div>
-                <Label>{t('End Time')}</Label>
+                <Label>{t('Start Time')}</Label>
                 <DateTimePicker
-                  value={endDateTime}
-                  onChange={handleEndDateTimeChange}
+                  value={startDateTime}
+                  onChange={handleStartDateTimeChange}
                   className="w-full"
-                  disabled={loading}
-                  placeholder={t("Select end time...")}
+                  disabled={(isSleeping && !isEditMode) || loading} // Only disabled when ending sleep and not editing
+                  placeholder={t("Select start time...")}
                 />
               </div>
-            )}
-          </div>
+              {(isSleeping || isEditMode) && (
+                <div>
+                  <Label>{t('End Time')}</Label>
+                  <DateTimePicker
+                    value={endDateTime}
+                    onChange={handleEndDateTimeChange}
+                    className="w-full"
+                    disabled={loading}
+                    placeholder={t("Select end time...")}
+                  />
+                </div>
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor={typeId} className="form-label">{t('Type')}</label>
@@ -615,6 +736,13 @@ export default function SleepForm({
                 <Select
                   value={formData.location}
                   onValueChange={(value: string) => {
+                    // In-progress move (issue #4): while a sleep is ongoing and
+                    // not being edited, picking a location records "moved to X"
+                    // immediately instead of editing the start location.
+                    if (isSleeping && !isEditMode && value !== 'Custom' && !activity) {
+                      handleMoveLocation(value);
+                      return;
+                    }
                     if (value === 'Custom') {
                       setIsCustomLocation(true);
                       setFormData({ ...formData, location: 'Custom' });
@@ -624,7 +752,7 @@ export default function SleepForm({
                       setFormData({ ...formData, location: value });
                     }
                   }}
-                  disabled={(isSleeping && !isEditMode) || loading}
+                  disabled={loading}
                 >
                   <SelectTrigger id={locationId} className="w-full">
                     <SelectValue placeholder={t("Select location")} />
@@ -652,6 +780,45 @@ export default function SleepForm({
                 )}
               </div>
             </div>
+            {isEditMode && editedSegments.length > 1 && (
+              <div className="space-y-2">
+                <Label>{t('Location Timeline')}</Label>
+                {editedSegments.map((segment, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <span className="text-sm min-w-24 shrink-0">
+                      {localizeSleepLocation(segment.location, t)}
+                    </span>
+                    {index > 0 ? (
+                      <DateTimePicker
+                        value={new Date(segment.startTime)}
+                        onChange={(date: Date) => {
+                          // A boundary picker moves the previous segment's end
+                          // and this segment's start together, so the chain
+                          // stays contiguous.
+                          const iso = toUTCString(date);
+                          if (!iso) return;
+                          setEditedSegments((prev) => prev.map((s, i) =>
+                            i === index
+                              ? { ...s, startTime: iso }
+                              : i === index - 1
+                                ? { ...s, endTime: iso }
+                                : s,
+                          ));
+                        }}
+                        className="flex-1"
+                        disabled={loading}
+                        placeholder={t('Moved at...')}
+                        aria-label={t('Moved at...')}
+                      />
+                    ) : (
+                      <span className="text-sm text-muted-foreground flex-1">
+                        {t('Starting location')}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             {(isSleeping || (isEditMode && endDateTime)) && (
               <div>
                 <label htmlFor={qualityId} className="form-label">{t('Sleep Quality')}</label>
@@ -688,26 +855,26 @@ export default function SleepForm({
               />
             </div>
           </div>
-          </form>
-        </FormPageContent>
-        <FormPageFooter>
-          <div className="flex justify-end space-x-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={loading}
-            >
-              {t('Cancel')}
-            </Button>
-            <Button 
-              onClick={handleSubmit}
-              disabled={loading}
-            >
-              {isEditMode ? t('Update Sleep') : (isSleeping ? t('End Sleep') : t('Start Sleep'))}
-            </Button>
-          </div>
-        </FormPageFooter>
+        </form>
+      </FormPageContent>
+      <FormPageFooter>
+        <div className="flex justify-end space-x-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={loading}
+          >
+            {t('Cancel')}
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={loading}
+          >
+            {isEditMode ? t('Update Sleep') : (isSleeping ? t('End Sleep') : t('Start Sleep'))}
+          </Button>
+        </div>
+      </FormPageFooter>
     </FormPage>
   );
 }

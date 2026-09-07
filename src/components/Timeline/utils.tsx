@@ -39,6 +39,7 @@ import { lbToLbOz, formatWeightDisplay } from '@/src/utils/weightUnits';
 import { formatPauseDuration } from '@/src/utils/pauseDisplay';
 import { isDirtyDiaper } from '@/src/utils/diaperStats';
 import { localizeSleepLocation } from '@/src/utils/sleepLocationUtils';
+import { formatSegmentSummary, LocationSegmentInput } from '@/src/utils/sleepSegments';
 
 export { lbToLbOz, formatWeightDisplay };
 
@@ -175,8 +176,8 @@ export const formatTime = (date: string, settings: Settings | null, includeDate:
     const dateStr = isToday
       ? (t ? t('Today') : 'Today')
       : isYesterday
-      ? (t ? t('Yesterday') : 'Yesterday')
-      : formatDateShort(dateObj, df) + ',';
+        ? (t ? t('Yesterday') : 'Yesterday')
+        : formatDateShort(dateObj, df) + ',';
     return `${dateStr} ${timeStr}`;
   } catch (error) {
     console.error('Error formatting time:', error);
@@ -272,11 +273,11 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
       // For sleep activities, always show dates with times
       const startTime = activity.startTime ? formatTime(activity.startTime, settings, true, t) : t('unknown');
       let endTime = t('ongoing');
-      
+
       if (activity.endTime) {
         endTime = formatTime(activity.endTime, settings, true, t);
       }
-      
+
       const duration = activity.duration ? ` ${formatDuration(activity.duration)}` : '';
       const formatSleepQuality = (quality: string) => {
         switch (quality) {
@@ -289,14 +290,14 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
       };
       const formatLocation = (location: string) => {
         if (location === 'OTHER') return t('Other');
-        
+
         return localizeSleepLocation(location, t);
       };
       const details = [
         { label: t('Type'), value: activity.type === 'NAP' ? t('Nap') : t('Night Sleep') },
         { label: t('Start Time'), value: startTime },
       ];
-      
+
       // Only show end time and duration if sleep has ended
       if (activity.endTime) {
         // Format duration as hours and minutes
@@ -315,9 +316,16 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
           details.push({ label: t('Quality'), value: formatSleepQuality((activity as any).quality) });
         }
       }
-      
+
       // Always show location if specified (SleepLog only)
-      if ((activity as any).location) {
+      // Multi-segment sleeps show the ordered location timeline instead of the
+      // single legacy location row.
+      const segments = (activity as any).locationSegments as LocationSegmentInput[] | undefined;
+      if (segments && segments.length > 1) {
+        for (const row of formatSegmentSummary(segments, (iso) => formatTime(iso, settings, true, t))) {
+          details.push({ label: t('Location'), value: `${formatLocation(row.location)}: ${row.span}` });
+        }
+      } else if ((activity as any).location) {
         details.push({ label: t('Location'), value: formatLocation((activity as any).location) });
       }
 
@@ -378,16 +386,16 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
         if (activity.side) {
           details.push({ label: t('Side'), value: formatBreastSide(activity.side) });
         }
-        
+
         // Show duration from feedDuration (in seconds) or fall back to amount (in minutes)
         if (activity.feedDuration) {
           const minutes = Math.floor(activity.feedDuration / 60);
           const seconds = activity.feedDuration % 60;
-          details.push({ 
-            label: t('Duration'), 
-            value: seconds > 0 ? 
-              `${minutes} ${t('min')} ${seconds} ${t('sec')}` : 
-              `${minutes} ${t('minutes')}` 
+          details.push({
+            label: t('Duration'),
+            value: seconds > 0 ?
+              `${minutes} ${t('min')} ${seconds} ${t('sec')}` :
+              `${minutes} ${t('minutes')}`
           });
         } else if (activity.amount) {
           details.push({ label: t('Duration'), value: `${activity.amount} ${t('minutes')}` });
@@ -498,7 +506,7 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
       { label: t('Content'), value: activity.content },
       { label: t('Category'), value: activity.category || t('Not specified') },
     ];
-    
+
     return {
       title: t('Note'),
       details: [...noteDetails, ...caretakerDetail],
@@ -512,17 +520,17 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
       { label: t('Soap Used'), value: activity.soapUsed ? t('Yes') : t('No') },
       { label: t('Shampoo Used'), value: activity.shampooUsed ? t('Yes') : t('No') },
     ];
-    
+
     if (activity.notes) {
       bathDetails.push({ label: t('Notes'), value: activity.notes });
     }
-    
+
     return {
       title: t('Bath Record'),
       details: [...bathDetails, ...caretakerDetail],
     };
   }
-  
+
   // Breast milk adjustment
   if ('reason' in activity && 'amount' in activity && !('type' in activity) && !('leftAmount' in activity)) {
     const adjDetails = [
@@ -656,7 +664,7 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
       const months = Math.floor((activity.ageInDays % 365) / 30);
       const days = activity.ageInDays % 30;
       let ageString = '';
-      
+
       if (years > 0) {
         ageString += `${years} year${years !== 1 ? 's' : ''} `;
       }
@@ -666,7 +674,7 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
       if (days > 0 || (years === 0 && months === 0)) {
         ageString += `${days} day${days !== 1 ? 's' : ''}`;
       }
-      
+
       milestoneDetails.push({ label: t('Age'), value: ageString.trim() });
     }
 
@@ -708,7 +716,7 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
       details: [...measurementDetails, ...caretakerDetail],
     };
   }
-  
+
   return { title: t('Activity'), details: [...caretakerDetail] };
 };
 
@@ -797,15 +805,20 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
       const duration = activity.duration ? formatDuration(activity.duration) : '';
       const timeSpan = `${startTimeFormatted} - ${endTimeFormatted.split(' ').slice(-2).join(' ')}`;
       const time = [duration, timeSpan].join(' ');
-      
+
       // Format location (SleepLog only)
       let locationText = '';
-      if ((activity as any).location) {
+      const segments = (activity as any).locationSegments as LocationSegmentInput[] | undefined;
+      if (segments && segments.length > 1) {
+        locationText = formatSegmentSummary(segments, (iso) => formatTime(iso, settings, true, t))
+          .map((row) => localizeSleepLocation(row.location, t))
+          .join(' → ');
+      } else if ((activity as any).location) {
         const loc = (activity as any).location;
         const location = loc === 'OTHER' ? t('Other') : capitalize(loc);
         locationText = localizeSleepLocation(location, t);
       }
-      
+
       // Format quality
       let qualityText = '';
       if ((activity as any).quality) {
@@ -845,18 +858,18 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
           default: return t(capitalize(side));
         }
       };
-      
+
       let details = '';
       if (activity.type === 'BREAST') {
         const side = activity.side ? `${t('Side')}: ${formatBreastSide(activity.side)}` : '';
-        
+
         // Get duration from feedDuration (in seconds) or fall back to amount (in minutes)
         let duration = '';
         if (activity.feedDuration) {
           const minutes = Math.floor(activity.feedDuration / 60);
           const seconds = activity.feedDuration % 60;
-          duration = seconds > 0 ? 
-            `${minutes}${t('min')} ${seconds}${t('sec')}` : 
+          duration = seconds > 0 ?
+            `${minutes}${t('min')} ${seconds}${t('sec')}` :
             `${minutes} ${t('min')}`;
         } else if (activity.amount) {
           duration = `${activity.amount} ${t('min')}`;
@@ -864,7 +877,7 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
 
         const pauseText = formatPauseDuration((activity as any).pauseDuration ?? 0, t);
         const pause = pauseText ? `${t('Pause')}: ${pauseText}` : '';
-        
+
         details = [side, duration, pause].filter(Boolean).join(' • ');
       } else if (activity.type === 'BOTTLE') {
         // Use unitAbbr instead of hardcoded 'oz'
@@ -893,13 +906,13 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
           details += ` ${t('of')} ${activity.food}`;
         }
       }
-      
+
       // Add notes if available for any feed type
       let notes: string = (activity as any).notes ?? "";
       if (notes.length > 30) {
         notes = notes.slice(0, 30) + '...';
       }
-      
+
       const time = formatTime(activity.time, settings, true, t);
       return {
         type: formatFeedType(activity.type),
@@ -934,7 +947,7 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
           default: return t(capitalize(color));
         }
       };
-      
+
       const conditions = [];
       if (isDirtyDiaper(activity.type)) {
         if (activity.condition) conditions.push(formatDiaperCondition(activity.condition));
@@ -974,15 +987,15 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
       activity.shampooUsed && t('Shampoo'),
       !activity.soapUsed && !activity.shampooUsed && t('Water only'),
     ]
-    .filter(Boolean)
-    .join(' + ');
-    
+      .filter(Boolean)
+      .join(' + ');
+
     // Add notes if available, truncate if needed
     let notes = activity.notes ?? '';
     if (notes.length > 30) {
       notes = notes.slice(0, 30) + '...';
     }
-    
+
     const bathType = (activity as any).bathType ? t((activity as any).bathType) : '';
 
     return {
@@ -990,7 +1003,7 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
       details: [time, bathType, bath, notes].filter(Boolean).join(' • ')
     };
   }
-  
+
   // Breast milk adjustment description
   if ('reason' in activity && 'amount' in activity && !('type' in activity) && !('leftAmount' in activity)) {
     const amount = (activity as any).amount;
@@ -1081,16 +1094,16 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
         default: return category;
       }
     };
-    
+
     const date = formatTime(activity.date, settings, true, t);
     const category = formatMilestoneCategory(activity.category);
-    
+
     // Format title with label
     const titleText = activity.title.length > 50 ? activity.title.slice(0, 50) + '...' : activity.title;
-    
+
     // Format description with label if available
     const descriptionText = activity.description && activity.description.length > 50 ? activity.description.slice(0, 50) + '...' : activity.description;
-    
+
     return {
       type: category,
       details: [date, titleText, descriptionText].filter(Boolean).join(' • '),
@@ -1109,7 +1122,7 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
         default: return type;
       }
     };
-    
+
     const date = formatTime(activity.date, settings, true, t);
     const displayValue = ('type' in activity && activity.type === 'WEIGHT')
       ? formatWeightDisplay(activity.value, activity.unit)
@@ -1120,7 +1133,7 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
       details: [date, displayValue].join(' • '),
     };
   }
-  
+
   return {
     type: t('Activity'),
     details: t('Activity logged')
@@ -1146,10 +1159,10 @@ export const getActivityEndpoint = (activity: ActivityType): string => {
   if ('vaccineName' in activity) return 'vaccine-log';
   if ('title' in activity && 'category' in activity) return 'milestone-log';
   if ('value' in activity && 'unit' in activity) return 'measurement-log';
-  
+
   // Log the activity for debugging
   console.log('Activity type not identified:', activity);
-  
+
   return '';
 };
 

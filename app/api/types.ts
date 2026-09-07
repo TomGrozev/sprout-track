@@ -105,10 +105,20 @@ export interface BabyUpdate extends Partial<BabyCreate> {
 export type SleepLogResponse = Omit<SleepLog, 'startTime' | 'endTime' | 'createdAt' | 'updatedAt' | 'deletedAt'> & {
   startTime: string;
   endTime: string | null;
+  locationSegments?: SleepLocationSegmentResponse[];
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
 };
+
+/** One ordered location segment of a sleep (issue #4), serialized for the client. */
+export interface SleepLocationSegmentResponse {
+  id: string;
+  location: string;
+  startTime: string;
+  endTime: string | null;
+  order: number;
+}
 
 export interface SleepLogCreate {
   babyId: string;
@@ -117,6 +127,8 @@ export interface SleepLogCreate {
   duration?: number;
   type: SleepType;
   location?: string;
+  /** Full replacement timeline; API derives it when absent. */
+  locationSegments?: { location: string; startTime: string; endTime: string | null }[];
   quality?: SleepQuality;
   notes?: string;
 }
