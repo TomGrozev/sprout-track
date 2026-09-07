@@ -1,0 +1,23 @@
+/* Dark mode overrides for ToggleGroup component */
+/* Uses !important to override Tailwind v4 CSS layer priority in Safari */
+
+/* Selected option: translucent blue glow instead of the light-mode ring */
+html.dark .toggle-dark-selected {
+  background-color: rgba(59, 130, 246, 0.2) !important; /* blue-500 with opacity */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Unselected option: transparent background with a subtle gray hover */
+html.dark .toggle-dark-unselected {
+  background-color: transparent !important;
+}
+
+html.dark .toggle-dark-unselected:hover {
+  background-color: rgba(55, 65, 81, 0.5) !important; /* gray-700 with opacity */
+}
+
+/* Option text lighter in dark mode (both states) */
+html.dark .toggle-dark-selected,
+html.dark .toggle-dark-unselected {
+  color: #e5e7eb !important; /* gray-200 */
+}

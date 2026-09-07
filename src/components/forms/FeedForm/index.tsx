@@ -14,6 +14,8 @@ import {
 import { Check, ArrowLeftRight, Pause, Play, TriangleAlert } from 'lucide-react';
 import { Textarea } from '@/src/components/ui/textarea';
 import { Switch } from '@/src/components/ui/switch';
+import { ToggleGroup } from '@/src/components/ui/toggle-group';
+import type { ToggleGroupOption } from '@/src/components/ui/toggle-group';
 import { useTimezone } from '@/app/context/timezone';
 import { resolveClientStartTime } from '@/src/utils/breastfeedStart';
 import { useTheme } from '@/src/context/theme';
@@ -67,6 +69,19 @@ export default function FeedForm({
   const { formatDate, toUTCString } = useTimezone();
   const { theme } = useTheme();
   const { showToast } = useToast();
+
+  const feedTypeOptions: ToggleGroupOption<FeedType>[] = [
+    {
+      value: 'BREAST',
+      label: t('Breast'),
+      icon: <img src="/breastfeed-128.png" alt="" className="w-16 h-16 object-contain" />,
+    },
+    {
+      value: 'BOTTLE',
+      label: t('Bottle'),
+      icon: <img src="/bottlefeed-128.png" alt="" className="w-16 h-16 object-contain" />,
+    },
+  ];
   
   const [selectedDateTime, setSelectedDateTime] = useState<Date>(() => {
     try {
@@ -1063,52 +1078,14 @@ export default function FeedForm({
             {/* Feed Type Selection - Full width on all screens */}
             <div>
               <label id={`${formId}-type-label`} className="form-label">{t('Type')}</label>
-              <div className="flex justify-center items-center gap-20 mt-2" role="group" aria-labelledby={`${formId}-type-label`}>
-                  {/* Breast Feed Button */}
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, type: 'BREAST' })}
-                    disabled={loading}
-                    className={`relative flex flex-col items-center justify-center p-2 rounded-full w-24 h-24 transition-all feed-type-button ${formData.type === 'BREAST' 
-                      ? 'bg-blue-100 ring-2 ring-blue-500 shadow-md feed-type-selected' 
-                      : 'bg-gray-50 hover:bg-gray-100'}`}
-                  >
-                    <img 
-                      src="/breastfeed-128.png" 
-                      alt="Breast Feed" 
-                      className="w-16 h-16 object-contain" 
-                    />
-                    <span className="text-xs font-medium mt-1">{t('Breast')}</span>
-                    {formData.type === 'BREAST' && (
-                      <div className="absolute -top-1 -right-1 bg-blue-500 rounded-full p-1">
-                        <Check className="h-3 w-3 text-white" aria-hidden="true" />
-                      </div>
-                    )}
-                  </button>
-                  
-                  {/* Bottle Feed Button */}
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, type: 'BOTTLE' })}
-                    disabled={loading}
-                    className={`relative flex flex-col items-center justify-center p-2 rounded-full w-24 h-24 transition-all feed-type-button ${formData.type === 'BOTTLE' 
-                      ? 'bg-blue-100 ring-2 ring-blue-500 shadow-md feed-type-selected' 
-                      : 'bg-gray-50 hover:bg-gray-100'}`}
-                  >
-                    <img 
-                      src="/bottlefeed-128.png" 
-                      alt="Bottle Feed" 
-                      className="w-16 h-16 object-contain" 
-                    />
-                    <span className="text-xs font-medium mt-1">{t('Bottle')}</span>
-                    {formData.type === 'BOTTLE' && (
-                      <div className="absolute -top-1 -right-1 bg-blue-500 rounded-full p-1">
-                        <Check className="h-3 w-3 text-white" aria-hidden="true" />
-                      </div>
-                    )}
-                  </button>
-                  
-                </div>
+              <ToggleGroup
+                aria-labelledby={`${formId}-type-label`}
+                layout="circle"
+                options={feedTypeOptions}
+                value={formData.type === '' ? null : formData.type}
+                onChange={(type) => setFormData({ ...formData, type })}
+                disabled={loading}
+              />
               </div>
             
             {formData.type === 'BREAST' && isFeeding && activeFeedData && !activity && (

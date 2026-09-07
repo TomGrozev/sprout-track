@@ -1,26 +1,6 @@
 /* Dark mode overrides for FeedForm component */
 /* Uses !important to override Tailwind v4 CSS layer priority in Safari */
 
-/* Make type text lighter in dark mode */
-html.dark .feed-type-button {
-  color: #e5e7eb !important; /* gray-200 */
-}
-
-/* Make background transparent in dark mode when not selected */
-html.dark .feed-type-button:not(.feed-type-selected) {
-  background-color: transparent !important;
-}
-
-/* Hover state for feed type buttons in dark mode */
-html.dark .feed-type-button:not(.feed-type-selected):hover {
-  background-color: rgba(55, 65, 81, 0.5) !important; /* gray-700 with opacity */
-}
-
-/* Selected state for feed type buttons in dark mode */
-html.dark .feed-type-selected {
-  background-color: rgba(59, 130, 246, 0.2) !important; /* blue-500 with opacity */
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-}
 
 /* Light mode styles for timer active side highlighting */
 .timer-active-side {
