@@ -177,6 +177,13 @@ async function handlePut(req: NextRequest, authContext: AuthResult): Promise<Nex
         data: { location: to },
       });
 
+      // Segment rows repeat the location on every segment; rename them too so
+      // the timeline labels stay in step with the mirrored SleepLog.location.
+      await tx.sleepLocationSegment.updateMany({
+        where: { sleep: { familyId: userFamilyId }, location: from },
+        data: { location: to },
+      });
+
       // Re-read settings inside the transaction so a concurrent hide/show
       // save from an open SleepForm can't be clobbered with stale data.
       const settings = await findSettings(tx, userFamilyId);

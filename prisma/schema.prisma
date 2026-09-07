@@ -368,12 +368,34 @@ model SleepLog {
   caretaker   Caretaker? @relation(fields: [caretakerId], references: [id])
   caretakerId String?
 
+  // Ordered location timeline; location above mirrors the first segment
+  // (see SleepLocationSegment) so legacy single-value reads keep working.
+  locationSegments SleepLocationSegment[]
+
   @@index([startTime])
   @@index([endTime])
   @@index([babyId])
   @@index([caretakerId])
   @@index([deletedAt])
   @@index([familyId])
+}
+
+// One stretch of a sleep spent in one location. Open segments have a null
+// endTime; a completed sleep's final segment is closed at the wake time, so
+// per-segment durations add up to the sleep duration.
+model SleepLocationSegment {
+  id        String    @id @default(uuid())
+  location  String
+  startTime DateTime
+  endTime   DateTime?
+  order     Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  sleep   SleepLog @relation(fields: [sleepId], references: [id], onDelete: Cascade)
+  sleepId String
+
+  @@index([sleepId, startTime])
 }
 
 model Unit {
