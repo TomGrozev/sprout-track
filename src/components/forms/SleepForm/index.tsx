@@ -24,8 +24,10 @@ import { useTimezone } from '@/app/context/timezone';
 import { useToast } from '@/src/components/ui/toast';
 import { handleExpirationError } from '@/src/lib/expiration-error-handler';
 import { useLocalization } from '@/src/context/localization';
-import { Settings } from 'lucide-react';
+import { Moon, Settings, Sun } from 'lucide-react';
 import { Checkbox } from '@/src/components/ui/checkbox';
+
+import { ToggleGroup, ToggleGroupOption } from '@/src/components/ui/toggle-group';
 
 import './sleep-form.css';
 
@@ -62,6 +64,12 @@ export default function SleepForm({
   const typeId = `${formId}-type`;
   const locationId = `${formId}-location`;
   const qualityId = `${formId}-quality`;
+
+  const sleepTypeOptions: ToggleGroupOption<SleepType>[] = [
+    { value: 'NAP', label: t('Nap'), icon: <Sun className="h-4 w-4" /> },
+    { value: 'NIGHT_SLEEP', label: t('Night Sleep'), icon: <Moon className="h-4 w-4" /> },
+  ];
+
   const { formatDate, calculateDurationMinutes, toUTCString } = useTimezone();
   const { showToast } = useToast();
   const [startDateTime, setStartDateTime] = useState<Date>(() => {
@@ -567,22 +575,14 @@ export default function SleepForm({
           </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label htmlFor={typeId} className="form-label">{t('Type')}</label>
-                <Select
-                  value={formData.type}
-                  onValueChange={(value: SleepType) =>
-                    setFormData({ ...formData, type: value })
-                  }
+                <label id={typeId} className="form-label">{t('Type')}</label>
+                <ToggleGroup
+                  aria-labelledby={typeId}
+                  options={sleepTypeOptions}
+                  value={formData.type === '' ? null : formData.type}
+                  onChange={(type) => setFormData({ ...formData, type })}
                   disabled={(isSleeping && !isEditMode) || loading} // Only disabled when ending sleep and not editing
-                >
-                  <SelectTrigger id={typeId} className="w-full">
-                    <SelectValue placeholder={t("Select type")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NAP">{t('Nap')}</SelectItem>
-                    <SelectItem value="NIGHT_SLEEP">{t('Night Sleep')}</SelectItem>
-                  </SelectContent>
-                </Select>
+                />
               </div>
               <div>
                 <div className="flex items-center justify-between">
