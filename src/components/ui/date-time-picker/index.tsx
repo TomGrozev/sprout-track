@@ -27,6 +27,7 @@ import {
   dateTimePickerTimeContainerStyles,
   dateTimePickerFooterStyles, // Keep footer style for potential future use or spacing
 } from './date-time-picker.styles';
+import { useTimeOpenTouchGate } from './useTimeOpenTouchGate';
 
 /**
  * DateTimePicker Component
@@ -68,6 +69,9 @@ export function DateTimePicker({
   // State for popovers
   const [dateOpen, setDateOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
+  // Touch opens skip the popover's programmatic focus on the hour input (no
+  // soft keyboard); keyboard/mouse opens keep focus-first. See the hook.
+  const { handleTriggerPointerDown, handleOpenAutoFocus } = useTimeOpenTouchGate(timeOpen);
   
   // Update the date when the value prop changes
   useEffect(() => {
@@ -172,6 +176,7 @@ export function DateTimePicker({
             variant="outline"
             className={cn(dateTimePickerButtonStyles, "date-time-picker-button")}
             disabled={disabled}
+            onPointerDown={handleTriggerPointerDown}
           >
             <Clock className="h-4 w-4 date-time-picker-clock-icon" aria-hidden="true" />
             <span>{formatTime(date)}</span>
@@ -181,6 +186,7 @@ export function DateTimePicker({
           className={cn(dateTimePickerPopoverContentStyles, "date-time-picker-popover")}
           align="start"
           sideOffset={4}
+          onOpenAutoFocus={handleOpenAutoFocus}
         >
           <div className={dateTimePickerTimeContainerStyles}>
             <TimeEntry
