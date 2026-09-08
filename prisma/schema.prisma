@@ -225,6 +225,7 @@ model Family {
   foods          Food[]
   foodLogs       FoodLog[]
   babyAllergens  BabyAllergen[]
+  milkBags       MilkBag[]
 }
 
 // New model for family membership
@@ -283,6 +284,7 @@ model Baby {
   photoLogs    PhotoLog[]
   foodLogs     FoodLog[]
   babyAllergens BabyAllergen[]
+  milkBags      MilkBag[]
 
   @@index([birthDate])
   @@index([deletedAt])
@@ -339,6 +341,7 @@ model Caretaker {
   photoLogs     PhotoLog[]
   foodLogs      FoodLog[]
   babyAllergens BabyAllergen[]
+  milkBags      MilkBag[]
 
   @@index([deletedAt])
   @@index([familyId])
@@ -450,6 +453,9 @@ model FeedLog {
   caretaker   Caretaker? @relation(fields: [caretakerId], references: [id])
   caretakerId String?
 
+  milkBag MilkBag? @relation(fields: [milkBagId], references: [id], onDelete: SetNull)
+  milkBagId String?
+
   @@index([time])
   @@index([startTime])
   @@index([endTime])
@@ -458,6 +464,7 @@ model FeedLog {
   @@index([unitAbbr])
   @@index([deletedAt])
   @@index([familyId])
+  @@index([milkBagId])
 }
 
 model DiaperLog {
@@ -567,6 +574,7 @@ model Settings {
   dateFormat          String   @default("MM/DD/YYYY") // "MM/DD/YYYY" | "DD/MM/YYYY" | "YYYY-MM-DD"
   timeFormat          String   @default("12h") // "12h" | "24h"
   growthChartStandard String   @default("CDC") // "CDC" | "WHO" — growth chart standard for percentile calculations
+  milkBagSettings     String? // JSON string: { dayStartHour, dayEndHour, freezerType, milkBagsUpgradedAt } (issue #8)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -699,6 +707,8 @@ model PumpLog {
   unit        Unit?     @relation(fields: [unitAbbr], references: [unitAbbr])
   unitAbbr    String?
   pumpAction  String    @default("STORED") // "STORED" | "FED" | "DISCARDED"
+  milkBag     MilkBag?  @relation(fields: [milkBagId], references: [id], onDelete: SetNull)
+  milkBagId   String?
   notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -721,6 +731,7 @@ model PumpLog {
   @@index([unitAbbr])
   @@index([deletedAt])
   @@index([familyId])
+  @@index([milkBagId])
 }
 
 model BreastMilkAdjustment {
@@ -749,6 +760,45 @@ model BreastMilkAdjustment {
   @@index([caretakerId])
   @@index([deletedAt])
   @@index([familyId])
+}
+
+// Discrete breast-milk bag inventory (issue #8): one bag aggregates pump sessions,
+// auto-labeled day/night from the first pump's time, one-tap storage location,
+// derived provenance (fresh/thawed) with computed use-by via src/utils/milk-storage.ts.
+model MilkBag {
+  id          String   @id @default(uuid())
+  label       String? // Optional user label
+  dayNight    String   @default("day") // "day" | "night" — auto from first pump time, overridable
+  storageLocation String @default("fridge") // "room" | "fridge" | "freezer"
+  provenance  String   @default("fresh") // "fresh" | "thawed" — derived on location moves
+  amount      Float // Volume in the bag's unit
+  unitAbbr    String?
+  status      String   @default("available") // "available" | "used" | "discarded"
+  startedAt   DateTime // First pump's start time — expression anchor for use-by while fresh
+  lastLocationChangedAt DateTime? // Anchor after a move (freezer->fridge thaw reset); null = never moved
+  usedAt      DateTime? // When a feed consumed the bag
+  discardedAmount Float? // Leftover recorded as discarded at consumption
+
+  family      Family?    @relation(fields: [familyId], references: [id])
+  familyId    String? // Nullable initially for migration
+  baby        Baby       @relation(fields: [babyId], references: [id], onDelete: Cascade)
+  babyId      String
+  caretaker   Caretaker? @relation(fields: [caretakerId], references: [id])
+  caretakerId String?
+
+  pumps    PumpLog[] // Pump sessions aggregated into this bag
+  feedLogs FeedLog[] // Feeds that consumed this bag
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([babyId])
+  @@index([familyId])
+  @@index([caretakerId])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([startedAt])
 }
 
 model PlayLog {
