@@ -2,6 +2,7 @@ import { Baby as BabyIcon } from 'lucide-react';
 import { useRef, useMemo, useState, useEffect } from 'react';
 import { ActivityType, TimelineActivityListProps } from '../types';
 import { getActivityIcon, getActivityStyle, getActivityDescription, getActivityTime, formatWeightDisplay } from '../utils';
+import { resolveBreastSideLabel } from '@/src/utils/breastSideLabel';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Label } from '@/src/components/ui/label';
 import { useLocalization } from '@/src/context/localization';
@@ -401,7 +402,7 @@ const TimelineV2ActivityList = ({
                                     
                                     if ('amount' in activity && 'type' in activity) {
                                       if (activity.type === 'BREAST') {
-                                        const side = activity.side ? t(activity.side === 'LEFT' ? 'Left Side' : 'Right Side') : '';
+                                        const side = activity.side ? (resolveBreastSideLabel(activity.side, settings) ?? t(activity.side === 'LEFT' ? 'Left Side' : 'Right Side')) : '';
                                         let duration = '';
                                         if (activity.feedDuration) {
                                           const minutes = Math.floor(activity.feedDuration / 60);

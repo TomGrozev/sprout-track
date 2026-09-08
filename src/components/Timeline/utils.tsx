@@ -5,6 +5,7 @@ import {
   DateFormatSetting,
   TimeFormatSetting,
 } from '@/src/utils/dateFormat';
+import { resolveBreastSideLabel } from '@/src/utils/breastSideLabel';
 import {
   Moon,
   Icon,
@@ -342,8 +343,8 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
       };
       const formatBreastSide = (side: string) => {
         switch (side) {
-          case 'LEFT': return t('Left');
-          case 'RIGHT': return t('Right');
+          case 'LEFT': return resolveBreastSideLabel(side, settings) ?? t('Left');
+          case 'RIGHT': return resolveBreastSideLabel(side, settings) ?? t('Right');
           default: return side;
         }
       };
@@ -572,12 +573,12 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
 
       // Add left amount if available
       if (activity.leftAmount) {
-        pumpDetails.push({ label: t('Left Breast'), value: `${activity.leftAmount} ${activity.unit || 'oz'}` });
+        pumpDetails.push({ label: resolveBreastSideLabel('LEFT', settings) ?? t('Left Breast'), value: `${activity.leftAmount} ${activity.unit || 'oz'}` });
       }
 
       // Add right amount if available
       if (activity.rightAmount) {
-        pumpDetails.push({ label: t('Right Breast'), value: `${activity.rightAmount} ${activity.unit || 'oz'}` });
+        pumpDetails.push({ label: resolveBreastSideLabel('RIGHT', settings) ?? t('Right Breast'), value: `${activity.rightAmount} ${activity.unit || 'oz'}` });
       }
 
       // Add total amount if available
@@ -840,8 +841,8 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
       };
       const formatBreastSide = (side: string) => {
         switch (side) {
-          case 'LEFT': return t('Left');
-          case 'RIGHT': return t('Right');
+          case 'LEFT': return resolveBreastSideLabel(side, settings) ?? t('Left');
+          case 'RIGHT': return resolveBreastSideLabel(side, settings) ?? t('Right');
           default: return t(capitalize(side));
         }
       };
@@ -1039,8 +1040,8 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
 
       // Always show left, right, and total amounts when available
       const unit = activity.unit || 'oz';
-      const left = activity.leftAmount && `${t('Left')}: ${activity.leftAmount} ${unit}`;
-      const right = activity.rightAmount && `${t('Right')}: ${activity.rightAmount} ${unit}`;
+      const left = activity.leftAmount && `${resolveBreastSideLabel('LEFT', settings) ?? t('Left')}: ${activity.leftAmount} ${unit}`;
+      const right = activity.rightAmount && `${resolveBreastSideLabel('RIGHT', settings) ?? t('Right')}: ${activity.rightAmount} ${unit}`;
       const sidesAmount = [left, right].filter(Boolean).join(' + ');
       const totalAmount = activity.totalAmount && `${t('Total Amount')}: ${activity.totalAmount} ${unit}`;
 
