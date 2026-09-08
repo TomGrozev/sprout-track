@@ -1,0 +1,18 @@
+/* Dark mode overrides for Chip component */
+html.dark .chip-dark-default {
+  background-color: rgba(13, 148, 136, 0.2); /* teal-600 with opacity */
+  color: #5eead4; /* teal-300 */
+}
+
+html.dark .chip-dark-default:hover {
+  background-color: rgba(13, 148, 136, 0.32);
+}
+
+html.dark .chip-dark-outline {
+  border-color: #4b5563; /* gray-600 */
+  color: #d1d5db; /* gray-300 */
+}
+
+html.dark .chip-dark-outline:hover {
+  background-color: rgba(75, 85, 99, 0.3);
+}
