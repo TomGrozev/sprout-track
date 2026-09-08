@@ -118,6 +118,7 @@ enum NotificationEventType {
   FEED_TIMER_EXPIRED
   DIAPER_TIMER_EXPIRED
   MEDICINE_TIMER_EXPIRED
+  MILK_BAG_EXPIRING
 }
 
 // Account model for email/password authentication
@@ -778,6 +779,7 @@ model MilkBag {
   lastLocationChangedAt DateTime? // Anchor after a move (freezer->fridge thaw reset); null = never moved
   usedAt      DateTime? // When a feed consumed the bag
   discardedAmount Float? // Leftover recorded as discarded at consumption
+  expiryNotifiedAt DateTime? // Latest expiry-lead/at-expiry threshold notified (dedup for milk-expiring pushes)
 
   family      Family?    @relation(fields: [familyId], references: [id])
   familyId    String? // Nullable initially for migration

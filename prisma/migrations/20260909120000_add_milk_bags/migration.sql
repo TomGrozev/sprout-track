@@ -49,4 +49,10 @@ CREATE INDEX "FeedLog_milkBagId_idx" ON "FeedLog"("milkBagId");
 CREATE INDEX "FeedLog_sourceBagId_idx" ON "FeedLog"("sourceBagId");
 
 -- Family-level milk-bag settings (day/night boundary, freezer type, upgrade marker)
+
+
 ALTER TABLE "Settings" ADD COLUMN "milkBagSettings" TEXT;
+
+-- Notification type for opt-in milk-expiry pushes (NotificationEventType enum is DB-level TEXT)
+ALTER TABLE "MilkBag" ADD COLUMN "expiryNotifiedAt" DATETIME;
+
