@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Baby } from '@prisma/client';
 import { Edit, ExternalLink, AlertCircle, Loader2, Plus } from 'lucide-react';
@@ -97,6 +97,16 @@ export default function ConfigTab({
   const familySlugId = `${id}-family-slug`;
   const dateFormatId = `${id}-date-format`;
   const timeFormatId = `${id}-time-format`;
+
+  // Buffered local state for the free-text breast label inputs — saved on blur,
+  // not on every keystroke, so partial typing never spams the API.
+  const [leftLabel, setLeftLabel] = useState(settings?.breastLeftLabel ?? '');
+  const [rightLabel, setRightLabel] = useState(settings?.breastRightLabel ?? '');
+
+  useEffect(() => {
+    setLeftLabel(settings?.breastLeftLabel ?? '');
+    setRightLabel(settings?.breastRightLabel ?? '');
+  }, [settings]);
 
   return (
     <div className="space-y-6">
@@ -313,6 +323,34 @@ export default function ConfigTab({
               onCheckedChange={(checked) => onSettingsChange({ enableBreastMilkTracking: checked } as any)}
             />
           </label>
+        </div>
+      </div>
+
+      {/* Custom Breast Labels */}
+      <div className="border-t border-slate-200 pt-6">
+        <h3 className="form-label mb-4">{t('Custom Breast Labels')}</h3>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">{t(`Give caretakers a personal name for each side instead of "Left" and "Right". Leave blank to keep the default.`)}</p>
+          <div>
+            <Label className="form-label" htmlFor={`${id}-breast-left-label`}>{t('Left Breast Label')}</Label>
+            <Input
+              id={`${id}-breast-left-label`}
+              value={leftLabel}
+              onChange={(e) => setLeftLabel(e.target.value)}
+              onBlur={() => onSettingsChange({ breastLeftLabel: leftLabel.trim() || null })}
+              placeholder={t('Left')}
+            />
+          </div>
+          <div>
+            <Label className="form-label" htmlFor={`${id}-breast-right-label`}>{t('Right Breast Label')}</Label>
+            <Input
+              id={`${id}-breast-right-label`}
+              value={rightLabel}
+              onChange={(e) => setRightLabel(e.target.value)}
+              onBlur={() => onSettingsChange({ breastRightLabel: rightLabel.trim() || null })}
+              placeholder={t('Right')}
+            />
+          </div>
         </div>
       </div>
 

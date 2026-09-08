@@ -17,6 +17,7 @@ import { Switch } from '@/src/components/ui/switch';
 import { ToggleGroup } from '@/src/components/ui/toggle-group';
 import type { ToggleGroupOption } from '@/src/components/ui/toggle-group';
 import { useTimezone } from '@/app/context/timezone';
+import { resolveBreastSideLabel } from '@/src/utils/breastSideLabel';
 import { resolveClientStartTime } from '@/src/utils/breastfeedStart';
 import { useTheme } from '@/src/context/theme';
 import { useToast } from '@/src/components/ui/toast';
@@ -125,6 +126,8 @@ export default function FeedForm({
   const [validationError, setValidationError] = useState<string>('');
   const [defaultSettings, setDefaultSettings] = useState({
     defaultBottleUnit: readCachedDefaultBottleUnit() as string,
+    breastLeftLabel: null as string | null,
+    breastRightLabel: null as string | null,
   });
 
   // Editing state for session duration inputs (null = not editing, use formatted value)
@@ -320,6 +323,8 @@ export default function FeedForm({
         const defaultBottleUnit = cacheDefaultBottleUnit(data.data.defaultBottleUnit) || 'OZ';
         setDefaultSettings({
           defaultBottleUnit,
+          breastLeftLabel: data.data.breastLeftLabel ?? null,
+          breastRightLabel: data.data.breastRightLabel ?? null,
         });
         
         // Set the default unit from settings (new entries only — when editing
@@ -1095,7 +1100,7 @@ export default function FeedForm({
                   <h3 className="text-sm font-medium mb-3 active-breast-session-title">{t('Active Breastfeed Session')}</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div className={`text-center p-3 rounded-lg ${activeFeedData.activeSide === 'LEFT' && !activeFeedData.isPaused ? 'timer-active-side border-2' : ''}`}>
-                      <label htmlFor={activeFeedData.isPaused ? `${formId}-session-left-min` : undefined} className="form-label text-xs">{t('Left')}</label>
+                      <label htmlFor={activeFeedData.isPaused ? `${formId}-session-left-min` : undefined} className="form-label text-xs">{resolveBreastSideLabel('LEFT', defaultSettings) ?? t('Left')}</label>
                       {activeFeedData.isPaused ? (
                         <div className="flex items-center justify-center gap-1 mt-1">
                           <Input
@@ -1146,7 +1151,7 @@ export default function FeedForm({
                       )}
                     </div>
                     <div className={`text-center p-3 rounded-lg ${activeFeedData.activeSide === 'RIGHT' && !activeFeedData.isPaused ? 'timer-active-side border-2' : ''}`}>
-                      <label htmlFor={activeFeedData.isPaused ? `${formId}-session-right-min` : undefined} className="form-label text-xs">{t('Right')}</label>
+                      <label htmlFor={activeFeedData.isPaused ? `${formId}-session-right-min` : undefined} className="form-label text-xs">{resolveBreastSideLabel('RIGHT', defaultSettings) ?? t('Right')}</label>
                       {activeFeedData.isPaused ? (
                         <div className="flex items-center justify-center gap-1 mt-1">
                           <Input
@@ -1274,7 +1279,7 @@ export default function FeedForm({
                     disabled={loading}
                     className="flex-1 h-16 text-lg font-semibold flex-col gap-0.5"
                   >
-                    <span>{t('Left Side')}</span>
+                    <span>{resolveBreastSideLabel('LEFT', defaultSettings) ?? t('Left Side')}</span>
                     {lastBreastSide === 'LEFT' && (
                       <span className="text-xs font-normal text-teal-700">{t('Last used')}</span>
                     )}
@@ -1286,7 +1291,7 @@ export default function FeedForm({
                     disabled={loading}
                     className="flex-1 h-16 text-lg font-semibold flex-col gap-0.5"
                   >
-                    <span>{t('Right Side')}</span>
+                    <span>{resolveBreastSideLabel('RIGHT', defaultSettings) ?? t('Right Side')}</span>
                     {lastBreastSide === 'RIGHT' && (
                       <span className="text-xs font-normal text-teal-700">{t('Last used')}</span>
                     )}
@@ -1326,7 +1331,7 @@ export default function FeedForm({
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="text-center p-3 rounded-lg">
-                      <label htmlFor={`${formId}-manual-left-min`} className="form-label text-xs">{t('Left')}</label>
+                      <label htmlFor={`${formId}-manual-left-min`} className="form-label text-xs">{resolveBreastSideLabel('LEFT', defaultSettings) ?? t('Left')}</label>
                       <div className="flex items-center justify-center gap-1 mt-1">
                         <Input
                           id={`${formId}-manual-left-min`}
@@ -1371,7 +1376,7 @@ export default function FeedForm({
                       </div>
                     </div>
                     <div className="text-center p-3 rounded-lg">
-                      <label htmlFor={`${formId}-manual-right-min`} className="form-label text-xs">{t('Right')}</label>
+                      <label htmlFor={`${formId}-manual-right-min`} className="form-label text-xs">{resolveBreastSideLabel('RIGHT', defaultSettings) ?? t('Right')}</label>
                       <div className="flex items-center justify-center gap-1 mt-1">
                         <Input
                           id={`${formId}-manual-right-min`}
@@ -1426,6 +1431,8 @@ export default function FeedForm({
                 side={formData.side}
                 leftDuration={formData.leftDuration}
                 rightDuration={formData.rightDuration}
+                breastLeftLabel={defaultSettings.breastLeftLabel}
+                breastRightLabel={defaultSettings.breastRightLabel}
                 activeBreast={formData.activeBreast}
                 isTimerRunning={isTimerRunning}
                 loading={loading}

@@ -5,6 +5,7 @@ import { Label } from '@/src/components/ui/label';
 import { Textarea } from '@/src/components/ui/textarea';
 import { Play, Pause, Clock } from 'lucide-react';
 import TimerInput from './TimerInput';
+import { resolveBreastSideLabel } from '@/src/utils/breastSideLabel';
 import { useLocalization } from '@/src/context/localization';
 
 import './feed-form.css';
@@ -20,6 +21,8 @@ interface BreastFeedFormProps {
   onTimerStart: (breast: 'LEFT' | 'RIGHT') => void;
   onTimerStop: () => void;
   onDurationChange: (breast: 'LEFT' | 'RIGHT', seconds: number) => void;
+  breastLeftLabel?: string | null;
+  breastRightLabel?: string | null;
   isEditing?: boolean; // New prop to indicate if we're editing an existing record
   validationError?: string; // Optional validation error message
   notes?: string;
@@ -59,6 +62,8 @@ export default function BreastFeedForm({
   onTimerStart,
   onTimerStop,
   onDurationChange,
+  breastLeftLabel = null,
+  breastRightLabel = null,
   isEditing = false, // Default to false
   notes = '',
   onNotesChange,
@@ -286,7 +291,7 @@ export default function BreastFeedForm({
             disabled={loading || isTimerRunning}
             className="flex-1 max-w-xs"
           >
-            {t('Left Side')}
+            {resolveBreastSideLabel('LEFT', { breastLeftLabel, breastRightLabel }) ?? t('Left Side')}
           </Button>
           <Button
             type="button"
@@ -299,10 +304,10 @@ export default function BreastFeedForm({
             disabled={loading || isTimerRunning}
             className="flex-1 max-w-xs"
           >
-            {t('Right Side')}
+            {resolveBreastSideLabel('RIGHT', { breastLeftLabel, breastRightLabel }) ?? t('Right Side')}
           </Button>
         </div>
-        <Label className="form-label">{t('Duration -')} {side === 'LEFT' ? t('Left') : t('Right')} {t('Side')}</Label>
+        <Label className="form-label">{t('Duration -')} {side === 'LEFT' ? (resolveBreastSideLabel('LEFT', { breastLeftLabel, breastRightLabel }) ?? t('Left')) : (resolveBreastSideLabel('RIGHT', { breastLeftLabel, breastRightLabel }) ?? t('Right'))} {t('Side')}</Label>
         <div className="flex flex-col items-center space-y-4 py-4">
           {side === 'LEFT' ? (
             <TimerInput
@@ -369,7 +374,7 @@ export default function BreastFeedForm({
             ? 'border-2 timer-active-side'
             : 'bg-transparent'
         }`}>
-          <Label className="text-lg font-semibold text-gray-700 timer-label">{t('Left Side')}</Label>
+          <Label className="text-lg font-semibold text-gray-700 timer-label">{resolveBreastSideLabel('LEFT', { breastLeftLabel, breastRightLabel }) ?? t('Left Side')}</Label>
           <TimerInput
             hours={leftHours}
             minutes={leftMinutes}
@@ -416,7 +421,7 @@ export default function BreastFeedForm({
             ? 'border-2 timer-active-side'
             : 'bg-transparent'
         }`}>
-          <Label className="text-lg font-semibold text-gray-700 timer-label">{t('Right Side')}</Label>
+          <Label className="text-lg font-semibold text-gray-700 timer-label">{resolveBreastSideLabel('RIGHT', { breastLeftLabel, breastRightLabel }) ?? t('Right Side')}</Label>
           <TimerInput
             hours={rightHours}
             minutes={rightMinutes}

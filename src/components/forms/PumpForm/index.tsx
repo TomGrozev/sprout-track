@@ -17,6 +17,7 @@ import { useToast } from '@/src/components/ui/toast';
 import { handleExpirationError } from '@/src/lib/expiration-error-handler';
 import { Plus, Minus } from 'lucide-react';
 import { Switch } from '@/src/components/ui/switch';
+import { resolveBreastSideLabel } from '@/src/utils/breastSideLabel';
 import { useLocalization } from '@/src/context/localization';
 import { BreastMilkAdjustmentResponse } from '@/app/api/types';
 import { useUnit } from '@/src/hooks/useUnit';
@@ -106,6 +107,12 @@ export default function PumpForm({
   const [loading, setLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initializedTime, setInitializedTime] = useState<string | null>(null);
+
+  // Breast labels are static family display config, needed in BOTH new-entry and
+  // edit mode (unlike the default unit, which is new-entry-only), so fetch them
+  // unconditionally on every form open.
+  const [breastLeftLabel, setBreastLeftLabel] = useState<string | null>(null);
+  const [breastRightLabel, setBreastRightLabel] = useState<string | null>(null);
   const [breastMilkTrackingEnabled, setBreastMilkTrackingEnabled] = useState(true);
 
   // Handle start date/time change
@@ -152,6 +159,30 @@ export default function PumpForm({
       setIsAdjustMode(false);
     }
   }, [isOpen, adjustmentActivity]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const fetchBreastLabels = async () => {
+      try {
+        const authToken = localStorage.getItem('authToken');
+        const response = await fetch('/api/settings', {
+          cache: 'no-store',
+          headers: {
+            'Authorization': authToken ? `Bearer ${authToken}` : '',
+          },
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.success && data.data) {
+          setBreastLeftLabel(data.data.breastLeftLabel ?? null);
+          setBreastRightLabel(data.data.breastRightLabel ?? null);
+        }
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+      }
+    };
+    fetchBreastLabels();
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && !isInitialized) {
@@ -691,7 +722,7 @@ export default function PumpForm({
 
                 {/* Left Amount Input */}
                 <div className="space-y-2">
-                  <Label htmlFor="leftAmount">{t('Left Amount')}</Label>
+                  <Label htmlFor="leftAmount">{resolveBreastSideLabel('LEFT', { breastLeftLabel, breastRightLabel }) ?? t('Left Amount')}</Label>
                   <div className="flex items-center">
                     <Button type="button" variant="outline" size="icon" onClick={() => decrementAmount('leftAmount')} disabled={loading} className="bg-gradient-to-r from-teal-600 to-emerald-600 border-0 rounded-full h-10 w-10 flex items-center justify-center shadow-lg hover:shadow-xl hover:-translate-y-0.5 decrement-button" aria-label={t('Decrease left amount')}>
                       <Minus className="h-4 w-4 text-white" aria-hidden="true" />
@@ -708,7 +739,7 @@ export default function PumpForm({
 
                 {/* Right Amount Input */}
                 <div className="space-y-2">
-                  <Label htmlFor="rightAmount">{t('Right Amount')}</Label>
+                  <Label htmlFor="rightAmount">{resolveBreastSideLabel('RIGHT', { breastLeftLabel, breastRightLabel }) ?? t('Right Amount')}</Label>
                   <div className="flex items-center">
                     <Button type="button" variant="outline" size="icon" onClick={() => decrementAmount('rightAmount')} disabled={loading} className="bg-gradient-to-r from-teal-600 to-emerald-600 border-0 rounded-full h-10 w-10 flex items-center justify-center shadow-lg hover:shadow-xl hover:-translate-y-0.5 decrement-button" aria-label={t('Decrease right amount')}>
                       <Minus className="h-4 w-4 text-white" aria-hidden="true" />
