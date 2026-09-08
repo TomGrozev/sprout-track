@@ -27,7 +27,7 @@ async function handleGet(req: NextRequest, authContext: AuthResult) {
     let settings = await prisma.settings.findFirst({
       where: { familyId: targetFamilyId },
     });
-    
+
     if (!settings) {
       settings = await prisma.settings.create({
         data: {
@@ -80,11 +80,11 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
     const targetFamilyId = scope.familyId;
 
     const body = await req.json();
-    
+
     let existingSettings = await prisma.settings.findFirst({
       where: { familyId: targetFamilyId },
     });
-    
+
     if (!existingSettings) {
       return NextResponse.json<ApiResponse<Settings>>(
         {
@@ -109,14 +109,15 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
       'familyName', 'securityPin', 'authType',
       'enableDebugTimer', 'enableDebugTimezone',
       'enableBreastMilkTracking',
+      'milkBagSettings',
       'breastLeftLabel', 'breastRightLabel',
       'dateFormat', 'timeFormat',
       'photoQuotaMB',
     ];
 
     const isAdmin = authContext.caretakerRole === 'ADMIN' ||
-                    authContext.caretakerRole === 'OWNER' ||
-                    authContext.isSysAdmin;
+      authContext.caretakerRole === 'OWNER' ||
+      authContext.isSysAdmin;
 
     const allowedFields = isAdmin
       ? [...userFields, ...adminOnlyFields]
@@ -168,9 +169,9 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
     if (body.securityPin) {
       try {
         const systemCaretaker = await prisma.caretaker.findFirst({
-          where: { 
+          where: {
             loginId: '00',
-            familyId: targetFamilyId 
+            familyId: targetFamilyId
           }
         });
 
