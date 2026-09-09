@@ -131,13 +131,14 @@ describe('mapBagsToOptions', () => {
   const now = new Date('2026-09-08T10:00:00.000Z');
   const dayStart = 7;
   const dayEnd = 19;
+  const labels = { day: 'Day', night: 'Night' };
 
   it('returns options for all available bags', () => {
     const bags = [
       makeBag({ id: 'a1' }),
       makeBag({ id: 'a2', dayNight: 'night' }),
     ];
-    const result = mapBagsToOptions(bags, now, dayStart, dayEnd, 'separate-door');
+    const result = mapBagsToOptions(bags, now, dayStart, dayEnd, 'separate-door', labels);
     expect(result.options).toHaveLength(2);
     expect(result.options.map((o) => o.id)).toEqual(['a1', 'a2']);
   });
@@ -148,13 +149,13 @@ describe('mapBagsToOptions', () => {
       makeBag({ id: 'b1', status: 'used' }),
       makeBag({ id: 'c1', status: 'discarded' }),
     ];
-    const result = mapBagsToOptions(bags, now, dayStart, dayEnd, 'separate-door');
+    const result = mapBagsToOptions(bags, now, dayStart, dayEnd, 'separate-door', labels);
     expect(result.options).toHaveLength(1);
     expect(result.options[0].id).toBe('a1');
   });
 
   it('returns null suggestedId when no bags', () => {
-    const result = mapBagsToOptions([], now, dayStart, dayEnd, 'separate-door');
+    const result = mapBagsToOptions([], now, dayStart, dayEnd, 'separate-door', labels);
     expect(result.suggestedId).toBeNull();
     expect(result.options).toHaveLength(0);
   });
@@ -164,7 +165,7 @@ describe('mapBagsToOptions', () => {
       makeBag({ id: 'u1', status: 'used' }),
       makeBag({ id: 'u2', status: 'used' }),
     ];
-    const result = mapBagsToOptions(bags, now, dayStart, dayEnd, 'separate-door');
+    const result = mapBagsToOptions(bags, now, dayStart, dayEnd, 'separate-door', labels);
     expect(result.suggestedId).toBeNull();
     expect(result.options).toHaveLength(0);
   });
@@ -174,15 +175,21 @@ describe('mapBagsToOptions', () => {
       makeBag({ id: 'd1', dayNight: 'day', amount: 60, unitAbbr: 'ml', label: 'Pump 1' }),
       makeBag({ id: 'n1', dayNight: 'night', amount: 80, unitAbbr: 'ml', label: 'Night pump' }),
     ];
-    const result = mapBagsToOptions(bags, now, dayStart, dayEnd, 'separate-door');
-    const labels = result.options.map((o) => o.label);
-    expect(labels).toContain('Day 60 ml — Pump 1');
-    expect(labels).toContain('Night 80 ml — Night pump');
+    const result = mapBagsToOptions(bags, now, dayStart, dayEnd, 'separate-door', labels);
+    const optionLabels = result.options.map((o) => o.label);
+    expect(optionLabels).toContain('Day 60 ml — Pump 1');
+    expect(optionLabels).toContain('Night 80 ml — Night pump');
+  });
+
+  it('passes caller timing labels through into option labels (localization)', () => {
+    const bags = [makeBag({ id: 'd1', dayNight: 'day', amount: 60, unitAbbr: 'ml' })];
+    const result = mapBagsToOptions(bags, now, dayStart, dayEnd, 'separate-door', { day: 'Jour', night: 'Nuit' });
+    expect(result.options[0].label).toBe('Jour 60 ml');
   });
 
   it('handles bags with unitAbbr null', () => {
     const bag = makeBag({ id: 'x1', unitAbbr: null });
-    const result = mapBagsToOptions([bag], now, dayStart, dayEnd, 'separate-door');
+    const result = mapBagsToOptions([bag], now, dayStart, dayEnd, 'separate-door', labels);
     expect(result.options[0].id).toBe('x1');
   });
 
@@ -209,6 +216,7 @@ describe('mapBagsToOptions', () => {
       dayStart,
       dayEnd,
       'separate-door',
+      labels,
     );
     expect(result.suggestedId).toBe('room');
   });
@@ -217,7 +225,7 @@ describe('mapBagsToOptions', () => {
     // now is 10:00 → day label
     // Only night bags available
     const nightBag = makeBag({ id: 'n1', dayNight: 'night' });
-    const result = mapBagsToOptions([nightBag], now, dayStart, dayEnd, 'separate-door');
+    const result = mapBagsToOptions([nightBag], now, dayStart, dayEnd, 'separate-door', labels);
     // suggestBagForFeed picks the only available bag regardless of label mismatch
     expect(result.suggestedId).toBe('n1');
   });

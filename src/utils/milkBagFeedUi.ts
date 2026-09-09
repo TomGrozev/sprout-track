@@ -58,9 +58,8 @@ export function mapBagsToOptions(
   dayStartHour: number,
   dayEndHour: number,
   freezerType: string,
+  timingLabels: { day: string; night: string },
 ): { suggestedId: string | null; options: Array<{ id: string; label: string }> } {
-  const dayLabel = 'Day';
-  const nightLabel = 'Night';
 
   // Enrich available bags for suggestion: compute useByAt from storage timing
   const enrichedBags: Array<MilkBagDTO & { useByAt: Date | null }> = [];
@@ -79,7 +78,7 @@ export function mapBagsToOptions(
   // Build options list using bagOptionLabel
   const options = enrichedBags.map((bag) => ({
     id: bag.id,
-    label: `${bagOptionLabel(bag, dayLabel, nightLabel)}`,
+    label: `${bagOptionLabel(bag, timingLabels.day, timingLabels.night)}`,
   }));
 
   return { suggestedId, options };
