@@ -24,6 +24,12 @@ import { useUnit } from '@/src/hooks/useUnit';
 import { cacheDefaultBottleUnit, readCachedDefaultBottleUnit } from '@/src/utils/defaultBottleUnit';
 
 import './pump-form.css';
+import type { MilkBagDTO } from '@/src/types/milk-bag';
+import { MilkBagAppendSection } from './MilkBagAppendSection';
+import { pumpBagDayNight } from '@/src/utils/milkBagPumpUi';
+import { DEFAULT_DAY_NIGHT_BOUNDARY, type DayNight } from '@/src/utils/milk-bag-rules';
+import { resolveMilkBagSettings } from '@/src/utils/milk-bag-settings';
+
 
 
 interface PumpFormProps {
@@ -115,6 +121,17 @@ export default function PumpForm({
   const [breastRightLabel, setBreastRightLabel] = useState<string | null>(null);
   const [breastMilkTrackingEnabled, setBreastMilkTrackingEnabled] = useState(true);
 
+  // Milk-bag append state
+  const [bags, setBags] = useState<MilkBagDTO[]>([]);
+  const [bagsLoaded, setBagsLoaded] = useState(false);
+  const [appendToBagId, setAppendToBagId] = useState<string | null>(null);
+  // Day/night label for a NEW bag; null = use the family boundary derivation
+  // (recomputed as the start time changes). Fetch alongside settings.
+  const [newBagDayNight, setNewBagDayNight] = useState<DayNight | null>(null);
+  const [dayNightBoundary, setDayNightBoundary] = useState(DEFAULT_DAY_NIGHT_BOUNDARY);
+  const [bagError, setBagError] = useState<string | null>(null);
+
+  // Fetch eligible bags when babyId is known
   // Handle start date/time change
   const handleStartDateTimeChange = (date: Date) => {
     setSelectedStartDateTime(date);
@@ -263,11 +280,41 @@ export default function PumpForm({
               }
             }
             setBreastMilkTrackingEnabled(data.data?.enableBreastMilkTracking ?? true);
+            setDayNightBoundary(resolveMilkBagSettings(data.data?.milkBagSettings));
           } catch (error) {
             console.error('Error fetching settings:', error);
           }
         };
         fetchDefaultUnit();
+
+        // Fetch milk bags when babyId is available
+        if (babyId) {
+          const fetchBags = async () => {
+            try {
+              const authToken = localStorage.getItem('authToken');
+              const response = await fetch(`/api/milk-bags?babyId=${babyId}`, {
+                cache: 'no-store',
+                headers: {
+                  'Authorization': authToken ? `Bearer ${authToken}` : '',
+                },
+              });
+              if (!response.ok) {
+                setBagsLoaded(true);
+                setBags([]);
+                return;
+              }
+              const data = await response.json();
+              if (data.success && data.data) {
+                setBags(data.data.bags || []);
+              }
+            } catch (error) {
+              console.error('Error fetching milk bags:', error);
+            } finally {
+              setBagsLoaded(true);
+            }
+          };
+          fetchBags();
+        }
 
         // Initialize from initialTime prop
         try {
@@ -327,6 +374,11 @@ export default function PumpForm({
       });
       setPumpAction('STORED');
       setAdjustAmount('');
+      setBags([]);
+      setBagsLoaded(false);
+      setAppendToBagId(null);
+      setNewBagDayNight(null);
+      setBagError(null);
       setAdjustUnit(readCachedDefaultBottleUnit());
       setAdjustIsAdding(true);
       setAdjustReason('Initial Stock');
@@ -499,6 +551,11 @@ export default function PumpForm({
         unitAbbr: formData.unitAbbr || 'OZ',
         pumpAction,
         notes: formData.notes || undefined,
+        appendToBagId: appendToBagId || undefined,
+        newBagDayNight:
+         !activity && !adjustmentActivity && pumpAction === 'STORED' && breastMilkTrackingEnabled && !appendToBagId
+          ? newBagDayNight ?? pumpBagDayNight(selectedStartDateTime, dayNightBoundary.dayStartHour, dayNightBoundary.dayEndHour)
+          : undefined,
       };
       
       // Determine if we're creating a new record or updating an existing one
@@ -530,6 +587,13 @@ export default function PumpForm({
             return;
           }
         }
+       
+        // Handle 422 bag eligibility errors — show inline, don't toast
+        if (response.status === 422) {
+          const data422 = await response.json();
+          setBagError(data422.error || 'Bag is no longer eligible');
+        return;
+        }
         
         // For other errors, parse and display
         const data = await response.json();
@@ -539,7 +603,7 @@ export default function PumpForm({
           message: data.error || 'Failed to save pump log',
           duration: 5000,
         });
-        return;
+       return;
       }
       
       const data = await response.json();
@@ -786,6 +850,23 @@ export default function PumpForm({
                   <Label htmlFor="notes">{t('Notes')}</Label>
                   <Textarea id="notes" name="notes" placeholder={t("Enter any notes about the pumping session")} value={formData.notes} onChange={handleInputChange} rows={3} />
                 </div>
+                
+                {/* Milk-bag append section */}
+                {breastMilkTrackingEnabled && !activity && !adjustmentActivity && pumpAction === 'STORED' && (
+                  <div className="space-y-2">
+                    <MilkBagAppendSection
+                      selectedStartTime={selectedStartDateTime}
+                      enableBreastMilkTracking={breastMilkTrackingEnabled}
+                      onAppendToBagId={setAppendToBagId}
+                      onNewBagDayNight={setNewBagDayNight}
+                      newBagDayNight={
+                       newBagDayNight ?? pumpBagDayNight(selectedStartDateTime, dayNightBoundary.dayStartHour, dayNightBoundary.dayEndHour)
+                      }
+                      error={bagError}
+                      bags={bags}
+                    />
+                  </div>
+                )}
               </div>
             </form>
           )}

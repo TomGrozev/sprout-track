@@ -36,7 +36,7 @@ async function handleGet(req: NextRequest, authContext: AuthResult) {
         pumpAction: 'STORED',
         deletedAt: null,
       },
-      select: { totalAmount: true, unitAbbr: true, pumpAction: true },
+      select: { totalAmount: true, unitAbbr: true, pumpAction: true, milkBagId: true },
     });
 
     // 2. Sum of breast milk adjustments
@@ -58,7 +58,7 @@ async function handleGet(req: NextRequest, authContext: AuthResult) {
         bottleType: { in: ['Breast Milk', 'Formula/Breast'] },
         deletedAt: null,
       },
-      select: { amount: true, unitAbbr: true, bottleType: true, breastMilkAmount: true, sourcePumpId: true, notes: true },
+      select: { amount: true, unitAbbr: true, bottleType: true, breastMilkAmount: true, sourcePumpId: true, notes: true, milkBagId: true },
     });
 
     const balance = calculateBreastMilkBalance({

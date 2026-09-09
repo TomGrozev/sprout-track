@@ -2,10 +2,7 @@ import { PhotoListResponse, PhotoLogCreate, PhotoLogResponse, PhotoResponse, Pho
 import { photosZipFileName, uniqueFileNames } from '@/src/utils/photoUtils';
 import { normalizeImageFile } from '@/src/utils/normalizeImageFile';
 
-function authHeaders(): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import { authHeaders } from '@/src/utils/authHeaders';
 
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {

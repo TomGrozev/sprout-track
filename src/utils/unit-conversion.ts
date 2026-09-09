@@ -35,3 +35,8 @@ export function convertVolume(amount: number, fromUnit: string, toUnit: string):
   if (from === 'ML' && to === 'OZ') return amount * ML_TO_OZ;
   return amount;
 }
+
+/** Convert a volume amount to ML, defaulting a missing/blank unit to OZ — matching the fallback every existing caller already applies by hand. */
+export function toMl(amount: number, unitAbbr?: string | null): number {
+  return convertVolume(amount, unitAbbr || 'OZ', 'ML');
+}

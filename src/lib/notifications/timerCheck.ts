@@ -6,6 +6,7 @@ import { t, formatTimeElapsed, DEFAULT_LANGUAGE } from './i18n';
 import { isNotificationsEnabled } from './config';
 import { routeForNotification } from './routes';
 import { parseFeedTimerTypes, buildFeedTimerWhere, foodCountsForTimer } from '@/src/utils/feedTimerConfig';
+import { checkMilkBagExpirations } from './milkExpiryCheck';
 import { resolvePreferenceOwner, PreferenceOwner } from './preferenceOwner';
 
 /**
@@ -704,6 +705,12 @@ export async function checkTimerExpirations(): Promise<number> {
     }
 
     const duration = Date.now() - startTime;
+    // Milk-bag expiry pass (issue #12) — runs on the same cron entry point.
+    // It never throws (it self-guards notifications-disabled and returns 0 on
+    // error), so it can't break the timer pass above.
+    const milkSent = await checkMilkBagExpirations();
+    notificationsSent += milkSent;
+
     console.log(`[TimerCheck] Timer check completed: ${notificationsSent} notification(s) sent in ${duration}ms`);
     return notificationsSent;
   } catch (error) {

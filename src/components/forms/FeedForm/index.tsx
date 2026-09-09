@@ -32,6 +32,7 @@ import './feed-form.css';
 import BreastFeedForm from './BreastFeedForm';
 import LinkedFeedsSection from './LinkedFeedsSection';
 import BottleFeedForm from './BottleFeedForm';
+import MilkBagSourceSection from './MilkBagSourceSection';
 import { useLocalization } from '@/src/context/localization';
 
 interface FeedFormProps {
@@ -115,6 +116,7 @@ export default function FeedForm({
     leftDuration: 0, // Duration in seconds for left breast
     rightDuration: 0, // Duration in seconds for right breast
     activeBreast: '' as 'LEFT' | 'RIGHT' | '', // Currently active breast for timer
+    milkBagId: '' as string,
   });
   const [loading, setLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -431,7 +433,8 @@ export default function FeedForm({
         feedDuration: feedDuration,
         leftDuration: activity.side === 'LEFT' ? feedDuration : 0,
         rightDuration: activity.side === 'RIGHT' ? feedDuration : 0,
-        activeBreast: ''
+        activeBreast: '',
+        milkBagId: ''
       });
       } else if (isFeeding && activeFeedData) {
         // End Feed mode - populate with active breastfeed data
@@ -706,7 +709,8 @@ export default function FeedForm({
         feedDuration: 0,
         leftDuration: 0,
         rightDuration: 0,
-        activeBreast: ''
+        activeBreast: '',
+        milkBagId: ''
       });
       setPendingPhotoFiles([]);
       setAttachedPhotos([]);
@@ -801,6 +805,7 @@ export default function FeedForm({
         breastMilkAmount: parseFloat(formData.breastMilkAmount || '0'),
       }),
       ...(formData.type === 'BOTTLE' && formData.bottleType && { bottleType: formData.bottleType }),
+      ...(!activity && formData.type === 'BOTTLE' && formData.milkBagId && { milkBagId: formData.milkBagId }),
       ...(formData.notes && { notes: formData.notes }),
       // Always sent so editing can clear a previously flagged reaction
       hadReaction: formData.hadReaction,
@@ -960,7 +965,8 @@ export default function FeedForm({
       feedDuration: 0,
       leftDuration: 0,
       rightDuration: 0,
-      activeBreast: ''
+      activeBreast: '',
+      milkBagId: ''
     });
 
     // Reset initialization flag
@@ -1496,6 +1502,13 @@ export default function FeedForm({
               />
             )}
             
+            {formData.type === 'BOTTLE' && (formData.bottleType === 'Breast Milk' || formData.bottleType === 'Formula/Breast') && babyId && (
+              <MilkBagSourceSection
+                babyId={babyId}
+                disabled={loading}
+                onSelectBag={(bagId) => setFormData(prev => ({ ...prev, milkBagId: bagId ?? '' }))}
+              />
+            )}
             {showReactionSection && (
               <div>
                 <div className="flex items-center justify-between">

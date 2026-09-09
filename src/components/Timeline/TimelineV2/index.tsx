@@ -26,6 +26,12 @@ import { SleepLogResponse, FeedLogResponse, DiaperLogResponse, PumpLogResponse, 
 import { fetchPhotos } from '@/src/utils/photoClientApi';
 import { useActivityCache } from './useActivityCache';
 import { cacheDefaultBottleUnit, readCachedDefaultBottleUnit } from '@/src/utils/defaultBottleUnit';
+import MilkBagInventoryModal from '@/src/components/modals/MilkBagInventoryModal';
+import MilkBagUpgradeModal from '@/src/components/modals/MilkBagUpgradeModal';
+import { useTimezone } from '@/app/context/timezone';
+import { resolveMilkBagSettings } from '@/src/utils/milk-bag-settings';
+import { displayedStoredLabel } from '@/src/utils/milkBagInventoryUi';
+import type { MilkBagDTO, MilkBagTotals } from '@/src/types/milk-bag';
 
 const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLatestStatusReady, onActivityDeleted }: TimelineProps) => {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -53,6 +59,11 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
   const [isLoadingActivities, setIsLoadingActivities] = useState<boolean>(false);
   const [isFetchAnimated, setIsFetchAnimated] = useState<boolean>(true);
   const [breastMilkBalance, setBreastMilkBalance] = useState<string | undefined>(undefined);
+  const [milkBags, setMilkBags] = useState<MilkBagDTO[]>([]);
+  const [milkBagTotals, setMilkBagTotals] = useState<MilkBagTotals>({ availableBags: 0, availableMl: 0, usedMl: 0, discardedMl: 0, displayedStoredMl: 0 });
+  const [isMilkBagModalOpen, setIsMilkBagModalOpen] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const upgradePromptShown = useRef(false);
   const lastRefreshTimestamp = useRef<number>(Date.now());
   const wasIdle = useRef<boolean>(false);
   const prevRefreshTrigger = useRef<number>(refreshTrigger ?? 0);
@@ -60,6 +71,7 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
   const activityCache = useActivityCache();
 
   const breastMilkTrackingEnabled = (settings as any)?.enableBreastMilkTracking ?? true;
+  const { dateFormat, timeFormat, userTimezone: timezone } = useTimezone();
 
   // Issue #225: feed categories that reset the "time since last feed" timer
   // (null = all feeds count)
@@ -145,15 +157,16 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
     onLatestStatusReady(status);
   }, [onLatestStatusReady, feedTimerCategories]);
 
-  const fetchBreastMilkBalance = async (babyId: string) => {
+  const fetchMilkBagData = async (babyId: string) => {
     if (!breastMilkTrackingEnabled) {
       setBreastMilkBalance(undefined);
+      setMilkBags([]);
+      setMilkBagTotals({ availableBags: 0, availableMl: 0, usedMl: 0, discardedMl: 0, displayedStoredMl: 0 });
       return;
     }
     try {
       const authToken = localStorage.getItem('authToken');
-      const unit = settings?.defaultBottleUnit || defaultBottleUnit;
-      const response = await fetch(`/api/breast-milk-balance?babyId=${babyId}&unit=${unit}`, {
+      const response = await fetch(`/api/milk-bags?babyId=${babyId}`, {
         headers: {
           ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
         }
@@ -161,16 +174,15 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data) {
-          const balance = data.data.balance;
-          if (balance > 0) {
-            setBreastMilkBalance(`${balance} ${data.data.unit.toLowerCase()}`);
-          } else {
-            setBreastMilkBalance(undefined);
-          }
+          setMilkBags(data.data.bags);
+          setMilkBagTotals(data.data.totals);
+          const unit = settings?.defaultBottleUnit || defaultBottleUnit;
+          const label = displayedStoredLabel(data.data.totals.displayedStoredMl, unit);
+          setBreastMilkBalance(label ?? undefined);
         }
       }
     } catch (error) {
-      console.error('Error fetching breast milk balance:', error);
+      console.error('Error fetching milk bag data:', error);
     }
   };
 
@@ -259,7 +271,7 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
       // Invalidate today's cache and re-fetch
       activityCache.invalidateDate(selectedDate);
       fetchActivitiesForDate(selectedDate, true);
-      fetchBreastMilkBalance(babyId);
+      fetchMilkBagData(babyId);
 
       // Also refresh heatmap if visible
       if (isHeatmapVisible) {
@@ -308,6 +320,11 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
         setSettings(data.data);
         const unit = cacheDefaultBottleUnit(data.data?.defaultBottleUnit);
         if (unit) setDefaultBottleUnit(unit);
+        const milkBagSettings = resolveMilkBagSettings(data.data?.milkBagSettings);
+        if (babyId && !upgradePromptShown.current && milkBagSettings.milkBagsUpgradedAt === null && (data.data?.enableBreastMilkTracking ?? true)) {
+          upgradePromptShown.current = true;
+          setIsUpgradeModalOpen(true);
+        }
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -339,7 +356,7 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
   // Fetch breast milk balance
   useEffect(() => {
     if (babyId) {
-      fetchBreastMilkBalance(babyId);
+      fetchMilkBagData(babyId);
     }
   }, [babyId, settings?.defaultBottleUnit, defaultBottleUnit]);
 
@@ -350,7 +367,7 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
       if (babyId) {
         activityCache.invalidateDate(selectedDate);
         fetchActivitiesForDate(selectedDate, true);
-        fetchBreastMilkBalance(babyId);
+        fetchMilkBagData(babyId);
       }
     }
   }, [refreshTrigger]);
@@ -522,6 +539,7 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
         breastMilkBalance={breastMilkTrackingEnabled ? breastMilkBalance : undefined}
         defaultBottleUnit={settings?.defaultBottleUnit || defaultBottleUnit}
         enableBreastMilkTracking={breastMilkTrackingEnabled}
+        onOpenMilkBags={() => setIsMilkBagModalOpen(true)}
       />
 
       {/* Activity List + Right-side Heatmap */}
@@ -720,6 +738,34 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
             onSuccess={handleFormSuccess}
           />
         </>
+      )}
+      {babyId && (
+        <MilkBagInventoryModal
+          open={isMilkBagModalOpen}
+          onClose={() => setIsMilkBagModalOpen(false)}
+          babyId={babyId}
+          bags={milkBags}
+          totals={milkBagTotals}
+          freezerType={resolveMilkBagSettings(settings?.milkBagSettings).freezerType}
+          dateFormat={dateFormat}
+          timeFormat={timeFormat}
+          timezone={timezone}
+          onBagsChanged={(bags, totals) => {
+            setMilkBags(bags);
+            setMilkBagTotals(totals);
+          }}
+        />
+      )}
+      {babyId && (
+        <MilkBagUpgradeModal
+          open={isUpgradeModalOpen}
+          onClose={() => setIsUpgradeModalOpen(false)}
+          babyId={babyId}
+          onUpgraded={() => {
+            refreshSettings();
+            fetchMilkBagData(babyId);
+          }}
+        />
       )}
     </div>
   );
