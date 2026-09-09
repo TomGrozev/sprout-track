@@ -856,6 +856,8 @@ export default function PumpForm({
                   <div className="space-y-2">
                     <MilkBagAppendSection
                       selectedStartTime={selectedStartDateTime}
+                      dayStartHour={dayNightBoundary.dayStartHour}
+                      dayEndHour={dayNightBoundary.dayEndHour}
                       enableBreastMilkTracking={breastMilkTrackingEnabled}
                       onAppendToBagId={setAppendToBagId}
                       onNewBagDayNight={setNewBagDayNight}

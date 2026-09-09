@@ -241,10 +241,87 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
         .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {}),
     };
 
-    const feedLog = await prisma.feedLog.update({
-      where: { id },
-      data,
-    });
+    // Milk-bag source semantics on edit: undefined = leave bag state untouched,
+    // '' = unlink and restore the previous bag, a different id = validate then
+    // transactionally restore the previous bag and consume the new one (mirrors
+    // POST's guards and consumeBag math). All guards run before any write.
+    type FeedLogRow = Awaited<ReturnType<typeof prisma.feedLog.update>>;
+    let feedLog: FeedLogRow;
+    const prevBagId = existingFeedLog.milkBagId ?? null;
+    const bodyBagId = body.milkBagId;
+    // Transaction op union: a feed-log update and/or milk-bag updates.
+    type TxPromise = ReturnType<typeof prisma.feedLog.update> | ReturnType<typeof prisma.milkBag.update>;
+
+    if (bodyBagId !== undefined && bodyBagId !== '' && bodyBagId !== prevBagId) {
+      // Switching to a different bag — validate it with the same guards as POST.
+      const bag = await prisma.milkBag.findFirst({
+        where: { id: bodyBagId, familyId },
+      });
+
+      if (!bag) {
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: 'Bag not found.' },
+          { status: 404 },
+        );
+      }
+
+      const effectiveBabyId = body.babyId ?? existingFeedLog.babyId;
+      if (bag.babyId !== effectiveBabyId) {
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: 'Milk bag belongs to a different baby.' },
+          { status: 422 },
+        );
+      }
+
+      if (bag.status && bag.status !== 'available') {
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: 'Bag already consumed.' },
+          { status: 422 },
+        );
+      }
+
+      const unitAbbr = body.unitAbbr || existingFeedLog.unitAbbr || 'OZ';
+      const fedMl = body.bottleType === 'Formula/Breast'
+        ? convertVolume(body.breastMilkAmount ?? 0, unitAbbr, 'ML')
+        : convertVolume(body.amount ?? existingFeedLog.amount ?? 0, unitAbbr, 'ML');
+
+      const bagAmountMl = convertVolume(bag.amount, bag.unitAbbr || 'OZ', 'ML');
+      const consumeResult = consumeBag(
+        { id: bag.id, amountMl: bagAmountMl, status: bag.status },
+        fedMl,
+      );
+      const discardedAmount = convertVolume(consumeResult.discardedMl, 'ML', bag.unitAbbr || 'OZ');
+
+      const ops: TxPromise[] = [
+        prisma.feedLog.update({ where: { id }, data: { ...data, milkBagId: bodyBagId } }),
+      ];
+      if (prevBagId) {
+        ops.push(prisma.milkBag.update({
+          where: { id: prevBagId },
+          data: { status: 'available', usedAt: null, discardedAmount: null },
+        }));
+      }
+      ops.push(prisma.milkBag.update({
+        where: { id: bodyBagId },
+        data: { status: 'used', usedAt: body.time ? toUTC(body.time) : existingFeedLog.time, discardedAmount },
+      }));
+      [feedLog] = (await prisma.$transaction(ops)) as [FeedLogRow, ...unknown[]];
+    } else if (bodyBagId === '') {
+      // Unlink: restore the previous bag (if any) and clear the bag source.
+      const ops: TxPromise[] = [
+        prisma.feedLog.update({ where: { id }, data: { ...data, milkBagId: null } }),
+      ];
+      if (prevBagId) {
+        ops.push(prisma.milkBag.update({
+          where: { id: prevBagId },
+          data: { status: 'available', usedAt: null, discardedAmount: null },
+        }));
+      }
+      [feedLog] = (await prisma.$transaction(ops)) as [FeedLogRow, ...unknown[]];
+    } else {
+      // Bag source unchanged (undefined or same id) — plain update, no bag writes.
+      feedLog = await prisma.feedLog.update({ where: { id }, data });
+    }
 
     // Format dates as ISO strings for response
     const response: FeedLogResponse = {

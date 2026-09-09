@@ -9,13 +9,15 @@ import {
  type BagAppendOption,
 } from '@/src/utils/milkBagPumpUi';
 import { useLocalization } from '@/src/context/localization';
-import { DEFAULT_DAY_NIGHT_BOUNDARY } from '@/src/utils/milk-bag-rules';
 import type { DayNight } from '@/src/utils/milk-bag-rules';
 import type { MilkBagDTO } from '@/src/types/milk-bag';
 
 interface MilkBagAppendSectionProps {
  selectedStartTime: Date;
  onAppendToBagId: (bagId: string | null) => void;
+  /** Family day/night boundary hours (already resolved via the family settings). */
+  dayStartHour: number;
+  dayEndHour: number;
  /** Day/night label for a new bag: the derived preview from PumpForm (override ?? boundary derivation). */
  newBagDayNight: DayNight;
  /** Propagate an explicit override up (null = back to the derived preview). */
@@ -38,6 +40,8 @@ interface MilkBagAppendSectionProps {
 export function MilkBagAppendSection({
  selectedStartTime: _selectedStartTime,
  onAppendToBagId,
+  dayStartHour,
+  dayEndHour,
  newBagDayNight,
  onNewBagDayNight,
  enableBreastMilkTracking,
@@ -56,11 +60,9 @@ export function MilkBagAppendSection({
    return;
   }
   const now = new Date();
-  const dayStartHour = DEFAULT_DAY_NIGHT_BOUNDARY.dayStartHour;
-  const dayEndHour = DEFAULT_DAY_NIGHT_BOUNDARY.dayEndHour;
   const eligible = eligibleBagsForAppend(bags, now.getTime(), dayStartHour, dayEndHour);
   setOptions(eligible.map((bag) => bagAppendOption(bag, now.getTime(), dayStartHour, dayEndHour)));
- }, [bags, enableBreastMilkTracking]);
+ }, [bags, enableBreastMilkTracking, dayStartHour, dayEndHour]);
 
  if (!enableBreastMilkTracking) {
   return null;
