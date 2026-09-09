@@ -5,6 +5,7 @@ import { Settings } from '@prisma/client';
 import { withAuthContext, AuthResult } from '../utils/auth';
 import { checkWritePermission } from '../utils/writeProtection';
 import { isValidGrowthStandard } from '@/src/utils/growthStandard';
+import { validateMilkBagSettings } from '@/src/utils/milk-bag-settings';
 import { resolveFamilyScope } from '../utils/family-scope';
 
 // The family securityPin (login PIN) must never be returned to the client.
@@ -154,6 +155,19 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
             );
           }
           (data as any)[field] = body[field];
+          continue;
+        }
+        if (field === 'milkBagSettings') {
+          // JSON blob driving the bag storage lifecycle (issue #10): reject
+          // garbled/wrong-shaped writes instead of corrupting live fields.
+          const milkCheck = validateMilkBagSettings(body[field]);
+          if (!milkCheck.ok) {
+            return NextResponse.json<ApiResponse<null>>(
+              { success: false, error: milkCheck.error },
+              { status: 400 }
+            );
+          }
+          (data as any)[field] = milkCheck.compacted;
           continue;
         }
         (data as any)[field] = body[field];
