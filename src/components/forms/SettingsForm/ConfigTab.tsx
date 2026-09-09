@@ -17,10 +17,15 @@ import {
 } from '@/src/components/ui/select';
 import { ShareButton } from '@/src/components/ui/share-button';
 import { Checkbox } from '@/src/components/ui/checkbox';
+import { ToggleGroup } from '@/src/components/ui/toggle-group';
+import { ToggleGroupOption } from '@/src/components/ui/toggle-group/toggle-group.types';
 import { useLocalization } from '@/src/context/localization';
 import { useTimezone } from '@/app/context/timezone';
 import { Settings } from '@/app/api/types';
 import { DateFormatSetting, TimeFormatSetting } from '@/src/utils/dateFormat';
+import { setFreezerType } from '@/src/utils/milkBagSettingsUi';
+import { resolveMilkBagSettings } from '@/src/utils/milk-bag-settings';
+import type { FreezerType } from '@/src/utils/milk-storage';
 import SleepLocationManager from './SleepLocationManager';
 import FoodManager from './FoodManager';
 
@@ -323,6 +328,24 @@ export default function ConfigTab({
               onCheckedChange={(checked) => onSettingsChange({ enableBreastMilkTracking: checked } as any)}
             />
           </label>
+        </div>
+      </div>
+
+      {/* Freezer Type */}
+      <div className="border-t border-slate-200 pt-6">
+        <h3 className="form-label mb-4">{t('Freezer Type')}</h3>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">{t('How long frozen breast milk stays good in your freezer: 2 weeks in a fridge compartment, 3 months in a separate-door freezer, or 6 months in a chest freezer.')}</p>
+          <ToggleGroup
+            aria-label={t('Freezer Type')}
+            options={[
+              { value: 'compartment', label: t('Compartment') },
+              { value: 'separate-door', label: t('Separate Door') },
+              { value: 'chest', label: t('Chest') },
+            ] as ToggleGroupOption<FreezerType>[]}
+            value={resolveMilkBagSettings((settings as any)?.milkBagSettings).freezerType}
+            onChange={(v) => onSettingsChange({ milkBagSettings: setFreezerType(settings?.milkBagSettings, v) } as any)}
+          />
         </div>
       </div>
 

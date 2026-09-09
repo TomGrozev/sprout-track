@@ -5,6 +5,7 @@ import { Settings } from '@prisma/client';
 import { withAuthContext, AuthResult } from '../utils/auth';
 import { checkWritePermission } from '../utils/writeProtection';
 import { isValidGrowthStandard } from '@/src/utils/growthStandard';
+import { validateMilkBagSettings } from '@/src/utils/milk-bag-settings';
 import { resolveFamilyScope } from '../utils/family-scope';
 
 // The family securityPin (login PIN) must never be returned to the client.
@@ -27,7 +28,7 @@ async function handleGet(req: NextRequest, authContext: AuthResult) {
     let settings = await prisma.settings.findFirst({
       where: { familyId: targetFamilyId },
     });
-    
+
     if (!settings) {
       settings = await prisma.settings.create({
         data: {
@@ -80,11 +81,11 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
     const targetFamilyId = scope.familyId;
 
     const body = await req.json();
-    
+
     let existingSettings = await prisma.settings.findFirst({
       where: { familyId: targetFamilyId },
     });
-    
+
     if (!existingSettings) {
       return NextResponse.json<ApiResponse<Settings>>(
         {
@@ -109,14 +110,15 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
       'familyName', 'securityPin', 'authType',
       'enableDebugTimer', 'enableDebugTimezone',
       'enableBreastMilkTracking',
+      'milkBagSettings',
       'breastLeftLabel', 'breastRightLabel',
       'dateFormat', 'timeFormat',
       'photoQuotaMB',
     ];
 
     const isAdmin = authContext.caretakerRole === 'ADMIN' ||
-                    authContext.caretakerRole === 'OWNER' ||
-                    authContext.isSysAdmin;
+      authContext.caretakerRole === 'OWNER' ||
+      authContext.isSysAdmin;
 
     const allowedFields = isAdmin
       ? [...userFields, ...adminOnlyFields]
@@ -155,6 +157,19 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
           (data as any)[field] = body[field];
           continue;
         }
+        if (field === 'milkBagSettings') {
+          // JSON blob driving the bag storage lifecycle (issue #10): reject
+          // garbled/wrong-shaped writes instead of corrupting live fields.
+          const milkCheck = validateMilkBagSettings(body[field]);
+          if (!milkCheck.ok) {
+            return NextResponse.json<ApiResponse<null>>(
+              { success: false, error: milkCheck.error },
+              { status: 400 }
+            );
+          }
+          (data as any)[field] = milkCheck.compacted;
+          continue;
+        }
         (data as any)[field] = body[field];
       }
     }
@@ -168,9 +183,9 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
     if (body.securityPin) {
       try {
         const systemCaretaker = await prisma.caretaker.findFirst({
-          where: { 
+          where: {
             loginId: '00',
-            familyId: targetFamilyId 
+            familyId: targetFamilyId
           }
         });
 

@@ -161,6 +161,7 @@ export interface FeedLogCreate {
   bottleType?: string;
   breastMilkAmount?: number;
   sessionId?: string; // Links breast feeds belonging to the same nursing session
+  milkBagId?: string; // Optional reference to a milk bag being consumed
 }
 
 // Active breastfeed session types
@@ -331,6 +332,8 @@ export interface PumpLogCreate {
   unitAbbr?: string;
   pumpAction?: string; // "STORED" | "FED" | "DISCARDED"
   notes?: string;
+  appendToBagId?: string | null; // attach to existing milk bag
+  newBagDayNight?: 'day' | 'night'; // create a new bag with this label (auto-derived client-side from the pump start)
 }
 
 // Breast milk adjustment types

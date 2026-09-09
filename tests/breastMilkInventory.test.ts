@@ -6,7 +6,7 @@ import {
   planAutoFeedSync,
   shouldHaveAutoPumpFeed,
 } from '@/src/utils/breastMilkInventory';
-import { normalizeVolumeUnit } from '@/src/utils/unit-conversion';
+import { normalizeVolumeUnit, toMl, OZ_TO_ML } from '@/src/utils/unit-conversion';
 
 describe('breast milk inventory', () => {
   it('does not count a pump-created FED feed as consumption from stored inventory', () => {
@@ -93,6 +93,63 @@ describe('breast milk inventory', () => {
 
     expect(balance).toBe(5);
   });
+
+  it('does not double-count a pump log already linked to a milk bag', () => {
+    const balance = calculateBreastMilkBalance({
+      pumpLogs: [
+        { totalAmount: 8, unitAbbr: 'OZ', pumpAction: 'STORED', milkBagId: null },
+        { totalAmount: 4, unitAbbr: 'OZ', pumpAction: 'STORED', milkBagId: 'bag-1' },
+      ],
+      adjustments: [],
+      feedLogs: [],
+      targetUnit: 'OZ',
+    });
+
+    expect(balance).toBe(8);
+  });
+
+  it('does not count a breast-milk feed already satisfied from a milk bag as legacy consumption', () => {
+    const balance = calculateBreastMilkBalance({
+      pumpLogs: [{ totalAmount: 8, unitAbbr: 'OZ', pumpAction: 'STORED' }],
+      adjustments: [],
+      feedLogs: [
+        {
+          amount: 3,
+          unitAbbr: 'OZ',
+          bottleType: 'Breast Milk',
+          breastMilkAmount: null,
+          sourcePumpId: null,
+          notes: 'Fed from a bag',
+          milkBagId: 'bag-1',
+        },
+      ],
+      targetUnit: 'OZ',
+    });
+
+    expect(balance).toBe(8);
+  });
+
+  it('does not count the breast-milk portion of a bag-linked mixed feed as legacy consumption', () => {
+    const balance = calculateBreastMilkBalance({
+      pumpLogs: [{ totalAmount: 300, unitAbbr: 'ML', pumpAction: 'STORED' }],
+      adjustments: [],
+      feedLogs: [
+        {
+          amount: 6,
+          unitAbbr: 'ML',
+          bottleType: 'Formula/Breast',
+          breastMilkAmount: 2,
+          sourcePumpId: null,
+          notes: null,
+          milkBagId: 'bag-1',
+        },
+      ],
+      targetUnit: 'ML',
+    });
+
+    expect(balance).toBe(300);
+  });
+
 });
 
 describe('normalizeVolumeUnit', () => {
@@ -114,6 +171,21 @@ describe('normalizeVolumeUnit', () => {
     expect(normalizeVolumeUnit('cups')).toBeNull();
     expect(normalizeVolumeUnit('L')).toBeNull();
     expect(normalizeVolumeUnit('grams')).toBeNull();
+  });
+});
+
+describe('toMl', () => {
+  it('converts an OZ amount to ML', () => {
+    expect(toMl(1, 'OZ')).toBeCloseTo(OZ_TO_ML);
+  });
+
+  it('leaves an ML amount unchanged', () => {
+    expect(toMl(100, 'ML')).toBe(100);
+  });
+
+  it('defaults a missing/blank unit to OZ', () => {
+    expect(toMl(5, null)).toBeCloseTo(5 * OZ_TO_ML);
+    expect(toMl(5, undefined)).toBeCloseTo(5 * OZ_TO_ML);
   });
 });
 

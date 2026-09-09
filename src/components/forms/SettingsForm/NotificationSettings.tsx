@@ -813,6 +813,40 @@ export default function NotificationSettings({
                       </Select>
                     )}
                   </div>
+
+                  {/* Milk Bag Expiring Preference (per-baby, default OFF) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        className="text-sm"
+                        htmlFor={`milk-bag-expiring-${device.id}-${baby.id}`}
+                      >
+                        {t('Milk Bag Expiring')}
+                      </Label>
+                      <Switch
+                        id={`milk-bag-expiring-${device.id}-${baby.id}`}
+                        checked={
+                          getPreference(
+                            device.id,
+                            baby.id,
+                            NotificationEventType.MILK_BAG_EXPIRING
+                          )?.enabled ?? false
+                        }
+                        onCheckedChange={(checked) =>
+                          handlePreferenceUpdate(
+                            device.id,
+                            baby.id,
+                            NotificationEventType.MILK_BAG_EXPIRING,
+                            { enabled: checked }
+                          )
+                        }
+                        disabled={loading}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      {t('Get notified when a milk bag is about to expire')}
+                    </p>
+                  </div>
                 </div>
               ))}
             </CardContent>
