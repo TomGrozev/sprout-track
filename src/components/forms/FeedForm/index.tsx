@@ -435,7 +435,7 @@ export default function FeedForm({
         leftDuration: activity.side === 'LEFT' ? feedDuration : 0,
         rightDuration: activity.side === 'RIGHT' ? feedDuration : 0,
         activeBreast: '',
-        milkBagId: ''
+        milkBagId: (activity as any).milkBagId || ''
       });
       } else if (isFeeding && activeFeedData) {
         // End Feed mode - populate with active breastfeed data
@@ -806,7 +806,7 @@ export default function FeedForm({
         breastMilkAmount: parseFloat(formData.breastMilkAmount || '0'),
       }),
       ...(formData.type === 'BOTTLE' && formData.bottleType && { bottleType: formData.bottleType }),
-      ...(!activity && formData.type === 'BOTTLE' && formData.milkBagId && { milkBagId: formData.milkBagId }),
+      ...(formData.type === 'BOTTLE' && { milkBagId: formData.milkBagId }),
       ...(formData.notes && { notes: formData.notes }),
       // Always sent so editing can clear a previously flagged reaction
       hadReaction: formData.hadReaction,
