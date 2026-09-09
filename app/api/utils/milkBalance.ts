@@ -25,7 +25,7 @@ export async function fetchLegacyBalance(
    babyId, familyId, type: 'BOTTLE',
    bottleType: { in: ['Breast Milk', 'Formula/Breast'] }, deletedAt: null,
   },
-  select: { amount: true, unitAbbr: true, bottleType: true, breastMilkAmount: true, sourcePumpId: true, notes: true },
+  select: { amount: true, unitAbbr: true, bottleType: true, breastMilkAmount: true, sourcePumpId: true, notes: true, milkBagId: true },
  });
  return calculateBreastMilkBalance({ pumpLogs, adjustments, feedLogs, targetUnit: 'ML' });
 }

@@ -3,11 +3,33 @@ import {
   assertFeedAllowed,
   milkExpiryDueAlerts,
   advanceExpiryNotifiedAt,
+  isBagExpired,
 } from '@/src/utils/milkBagExpiryUi';
 import { BagTiming, FreezerType } from '@/src/utils/milk-storage';
+import type { MilkBagDTO } from '@/src/types/milk-bag';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
+
+function bag(overrides: Partial<MilkBagDTO> = {}): MilkBagDTO {
+  return {
+    id: 'b1',
+    label: null,
+    dayNight: 'day',
+    storageLocation: 'room',
+    provenance: 'fresh',
+    amount: 120,
+    unitAbbr: 'ml',
+    status: 'available',
+    startedAt: '2026-01-01T08:00:00Z',
+    lastLocationChangedAt: null,
+    usedAt: null,
+    discardedAmount: null,
+    babyId: 'baby1',
+    pumps: [],
+    ...overrides,
+  };
+}
 
 function timing(overrides: Partial<BagTiming> = {}): BagTiming {
   return {
@@ -138,5 +160,43 @@ describe('assertFeedAllowed — warn-not-block', () => {
     expect(
       assertFeedAllowed(timing({ startedAt: start }), 'separate-door', new Date(useBy.getTime() + HOUR))
     ).toEqual({ ok: false, expired: true });
+  });
+});
+
+describe('isBagExpired — feed confirm predicate', () => {
+  const start = '2026-01-01T08:00:00Z';
+  const startMs = new Date(start).getTime();
+  const useBy = startMs + 8 * HOUR; // fresh room bag: 8h use-by
+
+  it('is false for a fresh bag still within its window', () => {
+    expect(isBagExpired(bag(), 'separate-door', new Date(useBy - HOUR))).toBe(false);
+  });
+
+  it('is true at the use-by instant', () => {
+    expect(isBagExpired(bag(), 'separate-door', new Date(useBy))).toBe(true);
+  });
+
+  it('is true past the use-by instant', () => {
+    expect(isBagExpired(bag(), 'separate-door', new Date(useBy + HOUR))).toBe(true);
+  });
+
+  it('is true for a thawed bag sitting in the freezer (invalid state)', () => {
+    expect(
+      isBagExpired(
+        bag({
+          provenance: 'thawed',
+          storageLocation: 'freezer',
+          lastLocationChangedAt: '2026-01-01T09:00:00Z',
+        }),
+        'separate-door',
+        new Date(startMs + 2 * HOUR)
+      )
+    ).toBe(true);
+  });
+
+  it('treats a missing lastLocationChangedAt like startedAt', () => {
+    // lastLocationChangedAt null = never moved; use-by anchored to startedAt (8h room).
+    expect(isBagExpired(bag(), 'separate-door', new Date(useBy - 1000))).toBe(false);
+    expect(isBagExpired(bag(), 'separate-door', new Date(useBy))).toBe(true);
   });
 });

@@ -107,6 +107,49 @@ describe('breast milk inventory', () => {
 
     expect(balance).toBe(8);
   });
+
+  it('does not count a breast-milk feed already satisfied from a milk bag as legacy consumption', () => {
+    const balance = calculateBreastMilkBalance({
+      pumpLogs: [{ totalAmount: 8, unitAbbr: 'OZ', pumpAction: 'STORED' }],
+      adjustments: [],
+      feedLogs: [
+        {
+          amount: 3,
+          unitAbbr: 'OZ',
+          bottleType: 'Breast Milk',
+          breastMilkAmount: null,
+          sourcePumpId: null,
+          notes: 'Fed from a bag',
+          milkBagId: 'bag-1',
+        },
+      ],
+      targetUnit: 'OZ',
+    });
+
+    expect(balance).toBe(8);
+  });
+
+  it('does not count the breast-milk portion of a bag-linked mixed feed as legacy consumption', () => {
+    const balance = calculateBreastMilkBalance({
+      pumpLogs: [{ totalAmount: 300, unitAbbr: 'ML', pumpAction: 'STORED' }],
+      adjustments: [],
+      feedLogs: [
+        {
+          amount: 6,
+          unitAbbr: 'ML',
+          bottleType: 'Formula/Breast',
+          breastMilkAmount: 2,
+          sourcePumpId: null,
+          notes: null,
+          milkBagId: 'bag-1',
+        },
+      ],
+      targetUnit: 'ML',
+    });
+
+    expect(balance).toBe(300);
+  });
+
 });
 
 describe('normalizeVolumeUnit', () => {

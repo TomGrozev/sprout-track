@@ -9,8 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/src/components/ui/select';
+import { Button } from '@/src/components/ui/button';
 import { useLocalization } from '@/src/context/localization';
 import { mapBagsToOptions, computeExpiryDate, bagOptionLabel } from '@/src/utils/milkBagFeedUi';
+import { isBagExpired } from '@/src/utils/milkBagExpiryUi';
 import { resolveMilkBagSettings } from '@/src/utils/milk-bag-settings';
 import { DEFAULT_DAY_NIGHT_BOUNDARY } from '@/src/utils/milk-bag-rules';
 import { DEFAULT_FREEZER_TYPE } from '@/src/utils/milk-storage';
@@ -35,6 +37,8 @@ export default function MilkBagSourceSection({ babyId, disabled, onSelectBag }: 
   const [dayEndHour, setDayEndHour] = useState(DEFAULT_DAY_NIGHT_BOUNDARY.dayEndHour);
   const [freezerType, setFreezerType] = useState(DEFAULT_FREEZER_TYPE);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Explicit confirm when the chosen bag is past its use-by — never re-enables silently.
+  const [expiryConfirmed, setExpiryConfirmed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,10 +76,23 @@ export default function MilkBagSourceSection({ babyId, disabled, onSelectBag }: 
     [bags, dayStartHour, dayEndHour, freezerType],
   );
 
-  // Report the selected bag up to the parent.
+  const selectedBag = useMemo(
+    () => bags.find((b) => b.id === selectedId) ?? null,
+    [bags, selectedId],
+  );
+  const selectedExpired = selectedBag ? isBagExpired(selectedBag, freezerType) : false;
+
+  // Re-select clears any previous explicit confirm (never silently re-confirm).
   useEffect(() => {
-    onSelectBag(selectedId);
-  }, [selectedId, onSelectBag]);
+    setExpiryConfirmed(false);
+  }, [selectedId]);
+
+  // Report the selected bag up to the parent. A past-use-by bag is held back
+  // (reported as null) until the user explicitly confirms via “Feed anyway”,
+  // so the feed never silently proceeds against an expired bag.
+  useEffect(() => {
+    onSelectBag(selectedExpired && !expiryConfirmed ? null : selectedId);
+  }, [selectedId, selectedExpired, expiryConfirmed, onSelectBag]);
 
   // Pre-select the auto-suggested bag once options are available.
   useEffect(() => {
@@ -130,6 +147,22 @@ export default function MilkBagSourceSection({ babyId, disabled, onSelectBag }: 
               })}
             </SelectContent>
           </Select>
+          {selectedExpired && !expiryConfirmed && (
+            <div className="milkbag-expiry-warning mt-2 space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+              <p className="milkbag-expiry-warning-text text-sm font-medium">
+                {t('This bag is past its use-by time. The feed will not use this bag unless you confirm.')}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setExpiryConfirmed(true)}
+                disabled={disabled}
+              >
+                {t('Feed anyway')}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

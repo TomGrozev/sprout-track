@@ -30,7 +30,7 @@ import MilkBagInventoryModal from '@/src/components/modals/MilkBagInventoryModal
 import MilkBagUpgradeModal from '@/src/components/modals/MilkBagUpgradeModal';
 import { useTimezone } from '@/app/context/timezone';
 import { resolveMilkBagSettings } from '@/src/utils/milk-bag-settings';
-import { convertVolume } from '@/src/utils/unit-conversion';
+import { displayedStoredLabel } from '@/src/utils/milkBagInventoryUi';
 import type { MilkBagDTO, MilkBagTotals } from '@/src/types/milk-bag';
 
 const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLatestStatusReady, onActivityDeleted }: TimelineProps) => {
@@ -177,12 +177,8 @@ const TimelineV2 = ({ babyId, refreshTrigger, initialDate, feedTimerTypes, onLat
           setMilkBags(data.data.bags);
           setMilkBagTotals(data.data.totals);
           const unit = settings?.defaultBottleUnit || defaultBottleUnit;
-          const displayAmount = convertVolume(data.data.totals.displayedStoredMl, 'ML', unit);
-          if (displayAmount > 0) {
-            setBreastMilkBalance(`${Math.round(displayAmount * 100) / 100} ${unit.toLowerCase()}`);
-          } else {
-            setBreastMilkBalance(undefined);
-          }
+          const label = displayedStoredLabel(data.data.totals.displayedStoredMl, unit);
+          setBreastMilkBalance(label ?? undefined);
         }
       }
     } catch (error) {

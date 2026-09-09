@@ -3,6 +3,7 @@ import {
   useByBadge,
   formatBagVolume,
   buildBagRow,
+  displayedStoredLabel,
   type BagRowOptions,
 } from '@/src/utils/milkBagInventoryUi';
 import type { MilkBagDTO } from '@/src/types/milk-bag';
@@ -80,6 +81,27 @@ describe('formatBagVolume', () => {
   it('omits the unit when absent', () => {
     expect(formatBagVolume(60, null)).toBe('60');
     expect(formatBagVolume(60, undefined)).toBe('60');
+  });
+});
+
+describe('displayedStoredLabel', () => {
+  it('formats a positive stored amount with the lowercase unit', () => {
+    expect(displayedStoredLabel(250, 'ML')).toBe('250 ml');
+  });
+
+  it('converts ML to OZ and rounds to 2 decimals', () => {
+    expect(displayedStoredLabel(1000, 'OZ')).toBe('33.81 oz');
+  });
+
+  it('rounds fractional values to 2 decimals', () => {
+    expect(displayedStoredLabel(123.456, 'ML')).toBe('123.46 ml');
+  });
+
+  it('returns null for zero or non-finite stored amounts', () => {
+    expect(displayedStoredLabel(0, 'ML')).toBeNull();
+    expect(displayedStoredLabel(-5, 'ML')).toBeNull();
+    expect(displayedStoredLabel(NaN, 'ML')).toBeNull();
+    expect(displayedStoredLabel(Infinity, 'ML')).toBeNull();
   });
 });
 

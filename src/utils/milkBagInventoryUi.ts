@@ -11,6 +11,7 @@
 import type { MilkBagDTO } from '@/src/types/milk-bag';
 import type { BagTiming, FreezerType, StorageLocation } from '@/src/utils/milk-storage';
 import { computeUseBy, isExpired } from '@/src/utils/milk-storage';
+import { convertVolume } from '@/src/utils/unit-conversion';
 import type { DayNight } from '@/src/utils/milk-bag-rules';
 import type { DateFormatSetting, TimeFormatSetting } from '@/src/utils/dateFormat';
 import { formatDateDisplay, formatTimeDisplay } from '@/src/utils/dateFormat';
@@ -52,6 +53,18 @@ export function useByBadge(
 export function formatBagVolume(amount: number, unitAbbr?: string | null): string {
   const unit = unitAbbr ? ` ${unitAbbr}` : '';
   return `${amount}${unit}`;
+}
+
+/**
+ * Format the total stored balance (legacy + available bags) for display.
+ * Returns null when there is nothing meaningful to show (zero or non-finite),
+ * otherwise the ML value converted to the display unit, rounded to 2 decimals,
+ * with a lowercase unit suffix (e.g. `33.81 oz`).
+ */
+export function displayedStoredLabel(displayedStoredMl: number, unit: string): string | null {
+  if (!Number.isFinite(displayedStoredMl) || displayedStoredMl <= 0) return null;
+  const displayAmount = convertVolume(displayedStoredMl, 'ML', unit);
+  return `${Math.round(displayAmount * 100) / 100} ${unit.toLowerCase()}`;
 }
 
 /** Map a bag's timestamps into the timing object `computeUseBy`/`isExpired` expect. */

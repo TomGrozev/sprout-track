@@ -15,6 +15,8 @@ import PumpingChartModal, { PumpingChartMetric } from './PumpingChartModal';
 import { useLocalization } from '@/src/context/localization';
 import { useBaby } from '@/app/context/baby';
 import { useUnit } from '@/src/hooks/useUnit';
+import { displayedStoredLabel } from '@/src/utils/milkBagInventoryUi';
+import { convertVolume } from '@/src/utils/unit-conversion';
 
 interface PumpingStatsSectionProps {
   stats: PumpStats;
@@ -45,17 +47,19 @@ const PumpingStatsSection: React.FC<PumpingStatsSectionProps> = ({ stats, activi
   const [chartModalOpen, setChartModalOpen] = useState(false);
   const [chartMetric, setChartMetric] = useState<PumpingChartMetric | null>(null);
   const [currentBalance, setCurrentBalance] = useState<{ balance: number; unit: string } | null>(null);
+  const [storedBalanceLabel, setStoredBalanceLabel] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchBalance = async () => {
       if (!selectedBaby || enableBreastMilkTracking === false) {
         setCurrentBalance(null);
+        setStoredBalanceLabel(null);
         return;
       }
       try {
         const authToken = localStorage.getItem('authToken');
         const response = await fetch(
-          `/api/breast-milk-balance?babyId=${selectedBaby.id}&unit=${stats.unit}`,
+          `/api/milk-bags?babyId=${selectedBaby.id}`,
           {
             cache: 'no-store',
             headers: {
@@ -69,8 +73,16 @@ const PumpingStatsSection: React.FC<PumpingStatsSectionProps> = ({ stats, activi
         );
         if (response.ok) {
           const data = await response.json();
-          if (data.success) {
-            setCurrentBalance(data.data);
+          if (data.success && data.data) {
+            const storedMl = data.data.totals?.displayedStoredMl;
+            const label = storedMl != null ? displayedStoredLabel(storedMl, stats.unit) : null;
+            if (label !== null) {
+              setStoredBalanceLabel(label);
+              setCurrentBalance({ balance: convertVolume(storedMl, 'ML', stats.unit), unit: stats.unit });
+            } else {
+              setStoredBalanceLabel(null);
+              setCurrentBalance(null);
+            }
           }
         }
       } catch {
@@ -138,7 +150,7 @@ const PumpingStatsSection: React.FC<PumpingStatsSectionProps> = ({ stats, activi
               </CardContent>
             </Card>
 
-            {currentBalance && (
+            {storedBalanceLabel != null && currentBalance && (
               <Card
                 className={cn(styles.statCard, "reports-stat-card cursor-pointer")}
                 onClick={() => {
@@ -148,7 +160,7 @@ const PumpingStatsSection: React.FC<PumpingStatsSectionProps> = ({ stats, activi
               >
                 <CardContent className="p-4">
                   <div className={cn(styles.statCardValue, "reports-stat-card-value")}>
-                    {currentBalance.balance.toFixed(1)} {currentBalance.unit.toLowerCase()}
+                    {storedBalanceLabel}
                   </div>
                   <div className={cn(styles.statCardLabel, "reports-stat-card-label")}>{t('Current Balance')}</div>
                 </CardContent>
