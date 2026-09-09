@@ -13,6 +13,50 @@ import {
 import type { DayNight } from '@/src/utils/milk-bag-rules';
 import type { MilkBagSettings } from '@/src/types/milk-bag';
 
+/**
+ * Validate a `Settings.milkBagSettings` JSON payload for write (issue #10):
+ * the blob must be a JSON object whose known keys — if present — are of the
+ * right shape. Unknown keys pass through untouched (forward compatibility);
+ * the DB write stores the compacted JSON of the parsed payload so garbled
+ * bytes never reach the lifecycle logic that reads this blob.
+ */
+export type ValidateMilkBagSettingsResult =
+ | { ok: true; compacted: string }
+ | { ok: false; error: string };
+
+const FREEZER_TYPE_VALUES: readonly string[] = ['compartment', 'separate-door', 'chest'];
+
+function isHour(value: unknown): boolean {
+ return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 23;
+}
+
+export function validateMilkBagSettings(raw: unknown): ValidateMilkBagSettingsResult {
+ if (typeof raw !== 'string') return { ok: false, error: 'Milk bag settings must be a JSON string' };
+ let parsed: unknown;
+ try {
+  parsed = JSON.parse(raw);
+ } catch {
+  return { ok: false, error: 'Milk bag settings must be valid JSON' };
+ }
+ if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+  return { ok: false, error: 'Milk bag settings must be a JSON object' };
+ }
+ const blob = parsed as Record<string, unknown>;
+ if (blob.freezerType !== undefined && (typeof blob.freezerType !== 'string' || !FREEZER_TYPE_VALUES.includes(blob.freezerType))) {
+  return { ok: false, error: 'Milk bag settings freezerType must be compartment, separate-door or chest' };
+ }
+ if (blob.dayStartHour !== undefined && !isHour(blob.dayStartHour)) {
+  return { ok: false, error: 'Milk bag settings dayStartHour must be an integer between 0 and 23' };
+ }
+ if (blob.dayEndHour !== undefined && !isHour(blob.dayEndHour)) {
+  return { ok: false, error: 'Milk bag settings dayEndHour must be an integer between 0 and 23' };
+ }
+ if (blob.milkBagsUpgradedAt !== undefined && blob.milkBagsUpgradedAt !== null && typeof blob.milkBagsUpgradedAt !== 'string') {
+  return { ok: false, error: 'Milk bag settings milkBagsUpgradedAt must be a timestamp string' };
+ }
+ return { ok: true, compacted: JSON.stringify(parsed) };
+}
+
 /** Family milk-bag settings with the upgrade marker separated out. */
 export type ResolvedMilkBagSettings = Omit<MilkBagSettings, 'milkBagsUpgradedAt'> & {
  milkBagsUpgradedAt: string | null;
