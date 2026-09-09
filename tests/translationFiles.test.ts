@@ -27,13 +27,13 @@ const referenceKeys = Object.keys(reference);
 const AMERICAN_RESIDUE: RegExp[] = [
   /diaper/i,
   /stroller/i,
-  /crib/i,
+  /\bcrib\b/i,
   /color/i,
   /gray/i,
   /favor/i,
   /customiz|organiz|recogniz|categoriz/i,
   /centimeter|milliliter/i,
-  /catalog/i,
+  /\bcatalog\b/i,
   /trash/i,
   /daycare/i,
 ];
