@@ -35,7 +35,7 @@ vi.mock('@/src/lib/notifications/activityHook', () => ({
  resetTimerNotificationState: vi.fn(() => Promise.resolve()),
 }));
 
-import { POST } from '../app/api/feed-log/route';
+import { POST, PUT } from '../app/api/feed-log/route';
 import { NextRequest } from 'next/server';
 
 const JWT_SECRET = 'test-secret';
@@ -87,6 +87,44 @@ function primeBag(bag: Record<string, unknown>) {
   time: new Date('2026-09-09T10:00:00.000Z'),
   createdAt: new Date('2026-09-09T10:00:00.000Z'),
   updatedAt: new Date('2026-09-09T10:00:00.000Z'),
+  deletedAt: null,
+ }));
+}
+
+function putRequest(id: string, body: unknown) {
+ return new NextRequest(`http://localhost/api/feed-log?id=${id}`, {
+  method: 'PUT',
+  headers: { Authorization: authHeader(), 'content-type': 'application/json' },
+  body: JSON.stringify(body),
+ });
+}
+
+// Full record the PUT path reads via findUnique (it must belong to fam-1).
+const EXISTING_LOG = {
+ id: 'feed-1',
+ familyId: 'fam-1',
+ babyId: 'baby-1',
+ type: 'BOTTLE',
+ bottleType: 'Breast Milk',
+ amount: 2,
+ unitAbbr: 'OZ',
+ milkBagId: 'bag-1',
+ time: new Date('2026-09-09T10:00:00.000Z'),
+ createdAt: new Date('2026-09-09T10:00:00.000Z'),
+ updatedAt: new Date('2026-09-09T10:00:00.000Z'),
+ deletedAt: null,
+};
+
+// Prime the PUT path: findUnique feeds the existing feed log, update returns it
+// merged with the new data (mirroring how create resolves inside primeBag).
+function primeExistingLog(log: Record<string, unknown> = EXISTING_LOG) {
+ mocks.prisma.feedLog.findUnique.mockResolvedValue(log);
+ mocks.prisma.feedLog.update.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+  ...EXISTING_LOG,
+  ...data,
+  time: EXISTING_LOG.time,
+  createdAt: EXISTING_LOG.createdAt,
+  updatedAt: EXISTING_LOG.updatedAt,
   deletedAt: null,
  }));
 }
@@ -145,5 +183,114 @@ describe('feed-log POST from-bag branch', () => {
   expect(updateArgs.data.discardedAmount).toBeCloseTo(90 - TWO_OZ_ML, 2);
 
   expect(mocks.prisma.feedLog.create).toHaveBeenCalledTimes(1);
+ });
+});
+
+describe('feed-log PUT bag-source editing (issue #13)', () => {
+ beforeEach(() => {
+  vi.clearAllMocks();
+  process.env.JWT_SECRET = JWT_SECRET;
+  delete process.env.DEPLOYMENT_MODE;
+ });
+
+ it('switching bag restores the old bag and consumes the new one transactionally', async () => {
+  primeExistingLog(); // existing feed log on bag-1
+  primeBag({ id: 'bag-2' }); // new bag-2 lookup (baby-1, available, 90 ml)
+  const res = await PUT(putRequest('feed-1', {
+   milkBagId: 'bag-2', amount: 2, unitAbbr: 'OZ', bottleType: 'Breast Milk',
+  }));
+  const body = await json(res);
+
+  expect(res.status).toBe(200);
+  expect(body.success).toBe(true);
+
+  // feed-log update carries the new bag id and runs inside the transaction
+  expect(mocks.prisma.feedLog.update).toHaveBeenCalledTimes(1);
+  expect(mocks.prisma.feedLog.update.mock.calls[0][0].data.milkBagId).toBe('bag-2');
+
+  // exactly two milk-bag writes: restore old (index 0), consume new (index 1)
+  expect(mocks.prisma.milkBag.update).toHaveBeenCalledTimes(2);
+  const restoreArgs = mocks.prisma.milkBag.update.mock.calls[0][0];
+  const consumeArgs = mocks.prisma.milkBag.update.mock.calls[1][0];
+  expect(restoreArgs.where).toEqual({ id: 'bag-1' });
+  expect(restoreArgs.data).toEqual({ status: 'available', usedAt: null, discardedAmount: null });
+  expect(consumeArgs.where).toEqual({ id: 'bag-2' });
+  expect(consumeArgs.data.status).toBe('used');
+ });
+
+ it('empty milkBagId unlinks: restores the previous bag and clears the source', async () => {
+  primeExistingLog(); // existing feed log on bag-1
+  const res = await PUT(putRequest('feed-1', { milkBagId: '' }));
+  const body = await json(res);
+
+  expect(res.status).toBe(200);
+  expect(body.success).toBe(true);
+  expect(mocks.prisma.feedLog.update).toHaveBeenCalledTimes(1);
+  expect(mocks.prisma.feedLog.update.mock.calls[0][0].data.milkBagId).toBeNull();
+  expect(mocks.prisma.milkBag.update).toHaveBeenCalledTimes(1);
+  const restoreArgs = mocks.prisma.milkBag.update.mock.calls[0][0];
+  expect(restoreArgs.where).toEqual({ id: 'bag-1' });
+  expect(restoreArgs.data).toEqual({ status: 'available', usedAt: null, discardedAmount: null });
+ });
+
+ it('same bag id is a no-op for the bag: only other fields update', async () => {
+  primeExistingLog(); // existing feed log already on bag-1
+  const res = await PUT(putRequest('feed-1', { milkBagId: 'bag-1', amount: 3 }));
+  const body = await json(res);
+
+  expect(res.status).toBe(200);
+  expect(body.success).toBe(true);
+  expect(mocks.prisma.milkBag.update).not.toHaveBeenCalled();
+  expect(mocks.prisma.feedLog.update).toHaveBeenCalledTimes(1);
+  expect(mocks.prisma.feedLog.update.mock.calls[0][0].data.amount).toBe(3);
+  expect(mocks.prisma.feedLog.update.mock.calls[0][0].data).not.toHaveProperty('milkBagId');
+ });
+
+ it('body without milkBagId leaves the bag untouched', async () => {
+  primeExistingLog(); // existing feed log on bag-1
+  const res = await PUT(putRequest('feed-1', { amount: 3 }));
+  const body = await json(res);
+
+  expect(res.status).toBe(200);
+  expect(body.success).toBe(true);
+  expect(mocks.prisma.milkBag.update).not.toHaveBeenCalled();
+  expect(mocks.prisma.feedLog.update).toHaveBeenCalledTimes(1);
+  expect(mocks.prisma.feedLog.update.mock.calls[0][0].data.amount).toBe(3);
+ });
+
+ it('rejects a new bag that belongs to a different baby', async () => {
+  primeExistingLog();
+  primeBag({ id: 'bag-2', babyId: 'baby-2' });
+  const res = await PUT(putRequest('feed-1', { milkBagId: 'bag-2' }));
+  const body = await json(res);
+
+  expect(res.status).toBe(422);
+  expect(body.error).toBe('Milk bag belongs to a different baby.');
+  expect(mocks.prisma.milkBag.update).not.toHaveBeenCalled();
+  expect(mocks.prisma.feedLog.update).not.toHaveBeenCalled();
+ });
+
+ it('rejects a new bag already consumed', async () => {
+  primeExistingLog();
+  primeBag({ id: 'bag-2', status: 'used' });
+  const res = await PUT(putRequest('feed-1', { milkBagId: 'bag-2' }));
+  const body = await json(res);
+
+  expect(res.status).toBe(422);
+  expect(body.error).toBe('Bag already consumed.');
+  expect(mocks.prisma.milkBag.update).not.toHaveBeenCalled();
+  expect(mocks.prisma.feedLog.update).not.toHaveBeenCalled();
+ });
+
+ it('rejects a non-existent bag id', async () => {
+  primeExistingLog();
+  mocks.prisma.milkBag.findFirst.mockResolvedValue(null);
+  const res = await PUT(putRequest('feed-1', { milkBagId: 'bag-2' }));
+  const body = await json(res);
+
+  expect(res.status).toBe(404);
+  expect(body.error).toBe('Bag not found.');
+  expect(mocks.prisma.milkBag.update).not.toHaveBeenCalled();
+  expect(mocks.prisma.feedLog.update).not.toHaveBeenCalled();
  });
 });
