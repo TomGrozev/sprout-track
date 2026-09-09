@@ -1,0 +1,29 @@
+/* MilkBagUpgradeModal dark-mode overrides. Light mode is Tailwind (see
+ * milk-bag-upgrade-modal.styles.ts); html.dark is driven by the app theme
+ * toggle, so we never use Tailwind's `dark:` classes. */
+html.dark .mbupgrade-choiceCard {
+  border-color: rgb(55 65 81 / 1);
+  background-color: rgb(31 41 55 / 0.4);
+}
+html.dark .mbupgrade-choiceCard:hover {
+  border-color: rgb(99 102 241 / 0.6);
+  background-color: rgb(49 46 129 / 0.35);
+}
+html.dark .mbupgrade-choiceCardTitle,
+html.dark .mbupgrade-balanceValue,
+html.dark .mbupgrade-readoutValue {
+  color: rgb(243 244 246 / 1);
+}
+html.dark .mbupgrade-choiceCardDesc,
+html.dark .mbupgrade-balanceLabel,
+html.dark .mbupgrade-fieldLabel,
+html.dark .mbupgrade-rowLabel {
+  color: rgb(156 163 175 / 1);
+}
+html.dark .mbupgrade-balanceRow,
+html.dark .mbupgrade-readout {
+  background-color: rgb(31 41 55 / 0.5);
+}
+html.dark .mbupgrade-row {
+  border-color: rgb(55 65 81 / 1);
+}

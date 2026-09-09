@@ -1,0 +1,30 @@
+/* MilkBagInventoryModal dark-mode overrides. Light mode is Tailwind (see
+ * milk-bag-inventory-modal.styles.ts); html.dark is driven by the app theme
+ * toggle, so we never use Tailwind's `dark:` classes. */
+html.dark .mbinv-row {
+  border-color: rgb(55 65 81 / 1);
+}
+html.dark .mbinv-title {
+  color: rgb(243 244 246 / 1);
+}
+html.dark .mbinv-volume,
+html.dark .mbinv-pumpTimes,
+html.dark .mbinv-locationLabel {
+  color: rgb(156 163 175 / 1);
+}
+html.dark .mbinv-chip {
+  background-color: rgb(55 65 81 / 0.6);
+  color: rgb(209 213 219 / 1);
+}
+html.dark .mbinv-empty {
+  color: rgb(156 163 175 / 1);
+}
+html.dark .mbinv-total-row {
+  background-color: rgb(31 41 55 / 0.6);
+}
+html.dark .mbinv-total-label {
+  color: rgb(156 163 175 / 1);
+}
+html.dark .mbinv-total-value {
+  color: rgb(243 244 246 / 1);
+}

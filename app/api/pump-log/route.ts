@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '../db';
+import { canAddPumpToBag } from '@/src/utils/milk-bag-rules';
+import { convertVolume } from '@/src/utils/unit-conversion';
 import { ApiResponse, PumpLogCreate, PumpLogResponse } from '../types';
 import { withAuthContext, AuthResult } from '../utils/auth';
 import { toUTC, formatForResponse, calculateDurationMinutes } from '../utils/timezone';
@@ -69,6 +71,43 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
       unitAbbr = normalizedUnit;
     }
 
+    // Handle milk-bag attachment — scope bag to family, verify eligibility
+    let milkBagId: string | null = null;
+    if (body.appendToBagId) {
+      const targetBag = await prisma.milkBag.findFirst({
+        where: { id: body.appendToBagId, familyId: userFamilyId, deletedAt: null, status: 'available' },
+      });
+      if (!targetBag) {
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: 'Milk bag not found or not available for appending.' },
+          { status: 422 }
+        );
+      }
+      // The bag must belong to the same baby
+      if (targetBag.babyId !== body.babyId) {
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: 'Milk bag belongs to a different baby.' },
+          { status: 422 }
+        );
+      }
+      const canAdd = canAddPumpToBag(
+        { startedAt: targetBag.startedAt, lastLocationChangedAt: targetBag.lastLocationChangedAt, provenance: targetBag.provenance as 'fresh' | 'thawed' | null, storageLocation: targetBag.storageLocation as 'room' | 'fridge' | 'freezer' | null, status: targetBag.status },
+        startTimeUTC,
+      );
+      if (!canAdd.ok) {
+        const reasonMap: Record<string, string> = {
+          'bag-unavailable': 'This bag is no longer available for attachments.',
+          'too-old': 'This bag has been open for more than 24 hours.',
+          'not-supported': 'This bag cannot accept new pumps.',
+        };
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: reasonMap[canAdd.reason] || 'This bag cannot accept new pumps.' },
+          { status: 422 }
+        );
+      }
+      milkBagId = targetBag.id;
+    }
+
     const familySettings = await prisma.settings.findFirst({
       where: { familyId: userFamilyId },
       select: { enableBreastMilkTracking: true },
@@ -90,8 +129,25 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
           notes: body.notes,
           caretakerId: caretakerId,
           familyId: userFamilyId,
+          milkBagId: milkBagId || null,
         },
       });
+
+      // If appending to a bag, increment its total amount (converted to the bag's unit)
+      if (milkBagId && totalAmount && unitAbbr) {
+        const bag = await tx.milkBag.findUnique({
+          where: { id: milkBagId },
+          select: { amount: true, unitAbbr: true },
+        });
+        if (bag) {
+          const bagUnit = bag.unitAbbr || 'OZ';
+          const converted = convertVolume(Number(totalAmount), unitAbbr || 'OZ', bagUnit);
+          await tx.milkBag.update({
+            where: { id: milkBagId },
+            data: { amount: bag.amount + converted },
+        });
+        }
+      }
 
       // Keep the feeding record for reports, but link it to the pump so it can
       // be synchronized and excluded from stored-inventory consumption.

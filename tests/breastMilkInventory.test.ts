@@ -6,7 +6,7 @@ import {
   planAutoFeedSync,
   shouldHaveAutoPumpFeed,
 } from '@/src/utils/breastMilkInventory';
-import { normalizeVolumeUnit } from '@/src/utils/unit-conversion';
+import { normalizeVolumeUnit, toMl, OZ_TO_ML } from '@/src/utils/unit-conversion';
 
 describe('breast milk inventory', () => {
   it('does not count a pump-created FED feed as consumption from stored inventory', () => {
@@ -93,6 +93,20 @@ describe('breast milk inventory', () => {
 
     expect(balance).toBe(5);
   });
+
+  it('does not double-count a pump log already linked to a milk bag', () => {
+    const balance = calculateBreastMilkBalance({
+      pumpLogs: [
+        { totalAmount: 8, unitAbbr: 'OZ', pumpAction: 'STORED', milkBagId: null },
+        { totalAmount: 4, unitAbbr: 'OZ', pumpAction: 'STORED', milkBagId: 'bag-1' },
+      ],
+      adjustments: [],
+      feedLogs: [],
+      targetUnit: 'OZ',
+    });
+
+    expect(balance).toBe(8);
+  });
 });
 
 describe('normalizeVolumeUnit', () => {
@@ -114,6 +128,21 @@ describe('normalizeVolumeUnit', () => {
     expect(normalizeVolumeUnit('cups')).toBeNull();
     expect(normalizeVolumeUnit('L')).toBeNull();
     expect(normalizeVolumeUnit('grams')).toBeNull();
+  });
+});
+
+describe('toMl', () => {
+  it('converts an OZ amount to ML', () => {
+    expect(toMl(1, 'OZ')).toBeCloseTo(OZ_TO_ML);
+  });
+
+  it('leaves an ML amount unchanged', () => {
+    expect(toMl(100, 'ML')).toBe(100);
+  });
+
+  it('defaults a missing/blank unit to OZ', () => {
+    expect(toMl(5, null)).toBeCloseTo(5 * OZ_TO_ML);
+    expect(toMl(5, undefined)).toBeCloseTo(5 * OZ_TO_ML);
   });
 });
 

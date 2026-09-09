@@ -5,6 +5,8 @@ import { FeedType } from '@prisma/client';
 import { withAuthContext, AuthResult } from '../utils/auth';
 import { toUTC, formatForResponse } from '../utils/timezone';
 import { checkWritePermission } from '../utils/writeProtection';
+ import { consumeBag } from '@/src/utils/milk-bag-rules';
+ import { convertVolume } from '@/src/utils/unit-conversion';
 import { notifyActivityCreated, resetTimerNotificationState } from '@/src/lib/notifications/activityHook';
 
 async function handlePost(req: NextRequest, authContext: AuthResult) {
@@ -38,7 +40,7 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
 
     // Convert all dates to UTC for storage
     const timeUTC = toUTC(body.time);
-    
+
     const data = {
       babyId: body.babyId,
       time: timeUTC,
@@ -59,30 +61,94 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
       hadReaction: body.hadReaction === true,
       reactionDescription: body.reactionDescription && body.reactionDescription.trim() ? body.reactionDescription : null,
       reactionCause: body.reactionCause && body.reactionCause.trim() ? body.reactionCause : null,
+      milkBagId: body.milkBagId || undefined,
       familyId,
     };
-    
-    const feedLog = await prisma.feedLog.create({
-      data,
-    });
 
-    // Format dates as ISO strings for response
-    const response: FeedLogResponse = {
-      ...feedLog,
-      time: formatForResponse(feedLog.time) || '',
-      createdAt: formatForResponse(feedLog.createdAt) || '',
-      updatedAt: formatForResponse(feedLog.updatedAt) || '',
-      deletedAt: formatForResponse(feedLog.deletedAt),
-    };
+    if (body.milkBagId) {
+      // Validate and consume the milk bag in a transaction
+      const bag = await prisma.milkBag.findFirst({
+        where: { id: body.milkBagId, familyId },
+      });
 
-    // Notify subscribers about activity creation (non-blocking)
-    notifyActivityCreated(feedLog.babyId, 'feed', { accountId: authContext.accountId, caretakerId: authContext.caretakerId }, { type: body.type, amount: body.amount, unitAbbr: body.unitAbbr, food: body.food, side: body.side }).catch(console.error);
-    resetTimerNotificationState(feedLog.babyId, 'feed').catch(console.error);
+      if (!bag) {
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: 'Bag not found.' },
+          { status: 404 },
+        );
+      }
 
-    return NextResponse.json<ApiResponse<FeedLogResponse>>({
-      success: true,
-      data: response,
-    });
+      if (bag.status && bag.status !== 'available') {
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: 'Bag already consumed.' },
+          { status: 422 },
+        );
+      }
+
+      // Compute fedMl (amount in ML)
+      const fedMl = body.bottleType === 'Formula/Breast'
+        ? convertVolume(body.breastMilkAmount ?? 0, body.unitAbbr || 'OZ', 'ML')
+        : convertVolume(body.amount ?? 0, body.unitAbbr || 'OZ', 'ML');
+
+      // Compute bag amount in ML for consumeBag
+      const bagAmountMl = convertVolume(bag.amount, bag.unitAbbr || 'OZ', 'ML');
+
+      const consumeResult = consumeBag(
+        { id: bag.id, amountMl: bagAmountMl, status: bag.status },
+        fedMl,
+      );
+
+      // Convert discarded amount back to bag's original unit
+      const discardedAmount = convertVolume(consumeResult.discardedMl, 'ML', bag.unitAbbr || 'OZ');
+
+      const [feedLog] = await prisma.$transaction([
+        prisma.feedLog.create({ data }),
+        prisma.milkBag.update({
+          where: { id: body.milkBagId },
+          data: { status: 'used', usedAt: timeUTC, discardedAmount },
+        }),
+      ]);
+
+      const feedLogResponse: FeedLogResponse = {
+        ...feedLog,
+        time: formatForResponse(feedLog.time) || '',
+        createdAt: formatForResponse(feedLog.createdAt) || '',
+        updatedAt: formatForResponse(feedLog.updatedAt) || '',
+        deletedAt: formatForResponse(feedLog.deletedAt),
+      };
+
+      notifyActivityCreated(feedLog.babyId, 'feed',
+        { accountId: authContext.accountId, caretakerId: authContext.caretakerId },
+        { type: body.type, amount: body.amount, unitAbbr: body.unitAbbr, food: body.food, side: body.side },
+      ).catch(console.error);
+      resetTimerNotificationState(feedLog.babyId, 'feed').catch(console.error);
+
+      return NextResponse.json<ApiResponse<FeedLogResponse>>({
+        success: true,
+        data: feedLogResponse,
+      });
+    } else {
+      const feedLog = await prisma.feedLog.create({ data });
+
+      const feedLogResponse: FeedLogResponse = {
+        ...feedLog,
+        time: formatForResponse(feedLog.time) || '',
+        createdAt: formatForResponse(feedLog.createdAt) || '',
+        updatedAt: formatForResponse(feedLog.updatedAt) || '',
+        deletedAt: formatForResponse(feedLog.deletedAt),
+      };
+
+      notifyActivityCreated(feedLog.babyId, 'feed',
+        { accountId: authContext.accountId, caretakerId: authContext.caretakerId },
+        { type: body.type, amount: body.amount, unitAbbr: body.unitAbbr, food: body.food, side: body.side },
+      ).catch(console.error);
+      resetTimerNotificationState(feedLog.babyId, 'feed').catch(console.error);
+
+      return NextResponse.json<ApiResponse<FeedLogResponse>>({
+        success: true,
+        data: feedLogResponse,
+      });
+    }
   } catch (error) {
     console.error('Error creating feed log:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to create feed log';
@@ -163,7 +229,7 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
         ? { reactionCause: body.reactionCause && body.reactionCause.trim() ? body.reactionCause : null }
         : {}),
       ...Object.entries(body)
-        .filter(([key]) => !['time', 'startTime', 'endTime', 'feedDuration', 'notes', 'bottleType', 'breastMilkAmount', 'hadReaction', 'reactionDescription', 'reactionCause', 'familyId', 'sourcePumpId'].includes(key))
+        .filter(([key]) => !['time', 'startTime', 'endTime', 'feedDuration', 'notes', 'bottleType', 'breastMilkAmount', 'hadReaction', 'reactionDescription', 'reactionCause', 'familyId', 'sourcePumpId', 'milkBagId'].includes(key))
         .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {}),
     };
 

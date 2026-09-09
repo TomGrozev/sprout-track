@@ -38,6 +38,8 @@ export type MilkBagTotals = {
  availableMl: number;
  usedMl: number;
  discardedMl: number;
+ /** Displayed stored balance = legacy total + sum of available bags. */
+ displayedStoredMl: number;
 };
 
 /** GET /api/milk-bags response envelope. */
@@ -89,12 +91,6 @@ export type MilkBagUpgradeRequest = {
  discardLeftover: boolean;
 };
 
-/** Feed-from-bag: POST/PUT feed-log gains these optional fields. */
-export type FeedBagFields = {
- sourceBagId?: string | null;
-};
-
-/** Pump-to-bag: POST/PUT pump-log gains this optional field. */
-export type PumpBagFields = {
- appendToBagId?: string | null; // add the pumped milk to an eligible (<24h, available) bag
-};
+// Feed-from-bag (`milkBagId`) and pump-to-bag (`appendToBagId`) fields live inline on
+// `FeedLogCreate` and `PumpLogCreate` in `app/api/types.ts` — no separate contract type;
+// `milkBagId` mirrors the `FeedLog.milkBagId` Prisma column directly.

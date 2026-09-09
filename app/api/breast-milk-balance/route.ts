@@ -36,7 +36,7 @@ async function handleGet(req: NextRequest, authContext: AuthResult) {
         pumpAction: 'STORED',
         deletedAt: null,
       },
-      select: { totalAmount: true, unitAbbr: true, pumpAction: true },
+      select: { totalAmount: true, unitAbbr: true, pumpAction: true, milkBagId: true },
     });
 
     // 2. Sum of breast milk adjustments

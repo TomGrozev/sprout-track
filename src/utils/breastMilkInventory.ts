@@ -6,6 +6,7 @@ export interface BreastMilkPumpInventoryRow {
   totalAmount: number | null;
   unitAbbr: string | null;
   pumpAction: string;
+  milkBagId?: string | null;
 }
 
 export interface BreastMilkAdjustmentInventoryRow {
@@ -92,7 +93,7 @@ export function calculateBreastMilkBalance({
   targetUnit: string;
 }): number {
   const storedTotal = pumpLogs.reduce((total, log) => {
-    if (log.pumpAction !== 'STORED' || log.totalAmount == null) return total;
+    if (log.pumpAction !== 'STORED' || log.totalAmount == null || log.milkBagId) return total;
     return total + convertVolume(log.totalAmount, log.unitAbbr || 'OZ', targetUnit);
   }, 0);
 
