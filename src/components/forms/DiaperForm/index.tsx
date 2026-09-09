@@ -26,6 +26,7 @@ import { handleExpirationError } from '@/src/lib/expiration-error-handler';
 import { useParams } from 'next/navigation';
 import { useLocalization } from '@/src/context/localization';
 import { isDirtyDiaper } from '@/src/utils/diaperStats';
+import QuickPresets from '@/src/components/forms/QuickPresets';
 
 interface DiaperFormProps {
   isOpen: boolean;
@@ -263,6 +264,16 @@ export default function DiaperForm({
         <FormPageContent>
           <form onSubmit={handleSubmit}>
           <div className="space-y-4">
+            {!activity && (
+              <QuickPresets
+                kind="diaper"
+                babyId={babyId}
+                isOpen={isOpen}
+                disabled={loading}
+                onApply={(values) => setFormData(prev => ({ ...prev, ...values }))}
+              />
+            )}
+            
             {/* Time Selection - Full width on all screens */}
             <div>
               <label className="form-label">{t('Time')}</label>

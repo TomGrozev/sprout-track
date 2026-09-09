@@ -26,6 +26,7 @@ import { newFeedSessionId } from '@/src/utils/feedSessionUtils';
 import { PhotoAttachments } from '@/src/components/ui/photo-attachments';
 import { uploadPhotos, linkPhoto, unlinkPhoto, fetchPhotos, fetchPhotosEnabled } from '@/src/utils/photoClientApi';
 import { cacheDefaultBottleUnit, readCachedDefaultBottleUnit } from '@/src/utils/defaultBottleUnit';
+import QuickPresets from '@/src/components/forms/QuickPresets';
 import './feed-form.css';
 
 // Import subcomponents
@@ -1068,6 +1069,15 @@ export default function FeedForm({
         <FormPageContent className="overflow-y-auto">
           <form onSubmit={handleSubmit} className="h-full flex flex-col">
           <div className="space-y-4 pb-20">
+          {!activity && !isFeeding && (
+           <QuickPresets
+            kind="feed"
+            babyId={babyId}
+            isOpen={isOpen}
+            disabled={loading}
+            onApply={(values) => setFormData(prev => ({ ...prev, ...values }))}
+           />
+          )}
             {/* Validation Error Display */}
             {validationError && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
