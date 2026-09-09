@@ -127,3 +127,13 @@ html.dark .linked-feeds-hint {
   font-weight: 700;
   height: 2.5rem;
 }
+
+/* Past-use-by milk-bag warning — dark mode override of amber-300/amber-50 */
+html.dark .milkbag-expiry-warning {
+  background-color: #451a03 !important; /* amber-950 */
+  border-color: #b45309 !important; /* amber-700 */
+}
+
+html.dark .milkbag-expiry-warning-text {
+  color: #fcd34d !important; /* amber-300 */
+}

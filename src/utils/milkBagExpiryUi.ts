@@ -22,6 +22,8 @@ import {
   expiryAlertTimes,
   isExpired,
 } from '@/src/utils/milk-storage';
+import { makeBagTiming } from '@/src/utils/milkBagApi';
+import type { MilkBagDTO } from '@/src/types/milk-bag';
 
 export type FeedAllowedResult = { ok: true } | { ok: false; expired: true };
 
@@ -39,6 +41,29 @@ export function assertFeedAllowed(
   return isExpired(timing, freezerType, now)
     ? { ok: false, expired: true }
     : { ok: true };
+}
+
+/**
+ * True when a bag is at/past its use-by (or in an invalid state such as a
+ * thawed bag sitting in the freezer). Mirrors `assertFeedAllowed` over a
+ * `MilkBagDTO`, defaulting missing timestamps to `startedAt` the same way
+ * `computeExpiryDate` does. `now` defaults to the current time; the predicate
+ * is warn-not-block, so it only flags — it never blocks consumption.
+ */
+export function isBagExpired(
+  bag: MilkBagDTO,
+  freezerType: FreezerType,
+  now: Date = new Date()
+): boolean {
+  const timing: BagTiming = {
+    ...makeBagTiming(
+      new Date(bag.startedAt),
+      bag.lastLocationChangedAt ? new Date(bag.lastLocationChangedAt) : null
+    ),
+    provenance: bag.provenance ?? undefined,
+    storageLocation: bag.storageLocation ?? undefined,
+  };
+  return !assertFeedAllowed(timing, freezerType, now).ok;
 }
 
 /**

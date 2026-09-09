@@ -96,7 +96,7 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
     const created = await tx.milkBag.create({
      data: {
       babyId, familyId: userFamilyId, caretakerId: caretakerId ?? null,
-      amount: bag.amount, unitAbbr: 'OZ', dayNight,
+      amount: bag.amount, unitAbbr: 'ML', dayNight,
       storageLocation, provenance: 'fresh', startedAt: baggedAt, label: bag.label ?? null,
      },
     });
