@@ -5,8 +5,8 @@ import { FeedType } from '@prisma/client';
 import { withAuthContext, AuthResult } from '../utils/auth';
 import { toUTC, formatForResponse } from '../utils/timezone';
 import { checkWritePermission } from '../utils/writeProtection';
- import { consumeBag } from '@/src/utils/milk-bag-rules';
- import { convertVolume } from '@/src/utils/unit-conversion';
+import { consumeBag } from '@/src/utils/milk-bag-rules';
+import { convertVolume } from '@/src/utils/unit-conversion';
 import { notifyActivityCreated, resetTimerNotificationState } from '@/src/lib/notifications/activityHook';
 
 async function handlePost(req: NextRequest, authContext: AuthResult) {
@@ -75,6 +75,14 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
         return NextResponse.json<ApiResponse<null>>(
           { success: false, error: 'Bag not found.' },
           { status: 404 },
+        );
+      }
+
+      // The bag must belong to the same baby
+      if (bag.babyId !== body.babyId) {
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: 'Milk bag belongs to a different baby.' },
+          { status: 422 },
         );
       }
 

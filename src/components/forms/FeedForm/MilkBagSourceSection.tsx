@@ -72,8 +72,8 @@ export default function MilkBagSourceSection({ babyId, disabled, onSelectBag }: 
   }, [babyId]);
 
   const { suggestedId, options } = useMemo(
-    () => mapBagsToOptions(bags, new Date(), dayStartHour, dayEndHour, freezerType),
-    [bags, dayStartHour, dayEndHour, freezerType],
+    () => mapBagsToOptions(bags, new Date(), dayStartHour, dayEndHour, freezerType, { day: t('Day'), night: t('Night') }),
+    [bags, dayStartHour, dayEndHour, freezerType, t],
   );
 
   const selectedBag = useMemo(
