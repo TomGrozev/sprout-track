@@ -23,8 +23,12 @@ import { BreastMilkAdjustmentResponse } from '@/app/api/types';
 import { useUnit } from '@/src/hooks/useUnit';
 import { cacheDefaultBottleUnit, readCachedDefaultBottleUnit } from '@/src/utils/defaultBottleUnit';
 
+import './pump-form.css';
 import type { MilkBagDTO } from '@/src/types/milk-bag';
 import { MilkBagAppendSection } from './MilkBagAppendSection';
+import { pumpBagDayNight } from '@/src/utils/milkBagPumpUi';
+import { DEFAULT_DAY_NIGHT_BOUNDARY, type DayNight } from '@/src/utils/milk-bag-rules';
+import { resolveMilkBagSettings } from '@/src/utils/milk-bag-settings';
 
 
 
@@ -121,6 +125,10 @@ export default function PumpForm({
   const [bags, setBags] = useState<MilkBagDTO[]>([]);
   const [bagsLoaded, setBagsLoaded] = useState(false);
   const [appendToBagId, setAppendToBagId] = useState<string | null>(null);
+  // Day/night label for a NEW bag; null = use the family boundary derivation
+  // (recomputed as the start time changes). Fetch alongside settings.
+  const [newBagDayNight, setNewBagDayNight] = useState<DayNight | null>(null);
+  const [dayNightBoundary, setDayNightBoundary] = useState(DEFAULT_DAY_NIGHT_BOUNDARY);
   const [bagError, setBagError] = useState<string | null>(null);
 
   // Fetch eligible bags when babyId is known
@@ -272,6 +280,7 @@ export default function PumpForm({
               }
             }
             setBreastMilkTrackingEnabled(data.data?.enableBreastMilkTracking ?? true);
+            setDayNightBoundary(resolveMilkBagSettings(data.data?.milkBagSettings));
           } catch (error) {
             console.error('Error fetching settings:', error);
           }
@@ -368,6 +377,7 @@ export default function PumpForm({
       setBags([]);
       setBagsLoaded(false);
       setAppendToBagId(null);
+      setNewBagDayNight(null);
       setBagError(null);
       setAdjustUnit(readCachedDefaultBottleUnit());
       setAdjustIsAdding(true);
@@ -542,6 +552,10 @@ export default function PumpForm({
         pumpAction,
         notes: formData.notes || undefined,
         appendToBagId: appendToBagId || undefined,
+        newBagDayNight:
+         !activity && !adjustmentActivity && pumpAction === 'STORED' && breastMilkTrackingEnabled && !appendToBagId
+          ? newBagDayNight ?? pumpBagDayNight(selectedStartDateTime, dayNightBoundary.dayStartHour, dayNightBoundary.dayEndHour)
+          : undefined,
       };
       
       // Determine if we're creating a new record or updating an existing one
@@ -841,13 +855,15 @@ export default function PumpForm({
                 {breastMilkTrackingEnabled && !activity && !adjustmentActivity && pumpAction === 'STORED' && (
                   <div className="space-y-2">
                     <MilkBagAppendSection
-                      babyId={babyId}
                       selectedStartTime={selectedStartDateTime}
                       enableBreastMilkTracking={breastMilkTrackingEnabled}
                       onAppendToBagId={setAppendToBagId}
+                      onNewBagDayNight={setNewBagDayNight}
+                      newBagDayNight={
+                       newBagDayNight ?? pumpBagDayNight(selectedStartDateTime, dayNightBoundary.dayStartHour, dayNightBoundary.dayEndHour)
+                      }
                       error={bagError}
                       bags={bags}
-                      bagsLoaded={bagsLoaded}
                     />
                   </div>
                 )}

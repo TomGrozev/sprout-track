@@ -333,6 +333,7 @@ export interface PumpLogCreate {
   pumpAction?: string; // "STORED" | "FED" | "DISCARDED"
   notes?: string;
   appendToBagId?: string | null; // attach to existing milk bag
+  newBagDayNight?: 'day' | 'night'; // create a new bag with this label (auto-derived client-side from the pump start)
 }
 
 // Breast milk adjustment types

@@ -116,7 +116,7 @@ export default function FeedForm({
     leftDuration: 0, // Duration in seconds for left breast
     rightDuration: 0, // Duration in seconds for right breast
     activeBreast: '' as 'LEFT' | 'RIGHT' | '', // Currently active breast for timer
-    sourceBagId: '' as string,
+    milkBagId: '' as string,
   });
   const [loading, setLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -434,7 +434,7 @@ export default function FeedForm({
         leftDuration: activity.side === 'LEFT' ? feedDuration : 0,
         rightDuration: activity.side === 'RIGHT' ? feedDuration : 0,
         activeBreast: '',
-        sourceBagId: ''
+        milkBagId: ''
       });
       } else if (isFeeding && activeFeedData) {
         // End Feed mode - populate with active breastfeed data
@@ -710,7 +710,7 @@ export default function FeedForm({
         leftDuration: 0,
         rightDuration: 0,
         activeBreast: '',
-        sourceBagId: ''
+        milkBagId: ''
       });
       setPendingPhotoFiles([]);
       setAttachedPhotos([]);
@@ -805,7 +805,7 @@ export default function FeedForm({
         breastMilkAmount: parseFloat(formData.breastMilkAmount || '0'),
       }),
       ...(formData.type === 'BOTTLE' && formData.bottleType && { bottleType: formData.bottleType }),
-      ...(!activity && formData.type === 'BOTTLE' && formData.sourceBagId && { milkBagId: formData.sourceBagId }),
+      ...(!activity && formData.type === 'BOTTLE' && formData.milkBagId && { milkBagId: formData.milkBagId }),
       ...(formData.notes && { notes: formData.notes }),
       // Always sent so editing can clear a previously flagged reaction
       hadReaction: formData.hadReaction,
@@ -966,7 +966,7 @@ export default function FeedForm({
       leftDuration: 0,
       rightDuration: 0,
       activeBreast: '',
-      sourceBagId: ''
+      milkBagId: ''
     });
 
     // Reset initialization flag
@@ -1506,7 +1506,7 @@ export default function FeedForm({
               <MilkBagSourceSection
                 babyId={babyId}
                 disabled={loading}
-                onSelectBag={(sourceBagId) => setFormData(prev => ({ ...prev, sourceBagId: sourceBagId ?? '' }))}
+                onSelectBag={(bagId) => setFormData(prev => ({ ...prev, milkBagId: bagId ?? '' }))}
               />
             )}
             {showReactionSection && (

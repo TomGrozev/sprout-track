@@ -14,6 +14,11 @@ import {
   shouldHaveAutoPumpFeed,
 } from '@/src/utils/breastMilkInventory';
 import { normalizeVolumeUnit } from '@/src/utils/unit-conversion';
+import {
+  planPumpBag,
+} from '@/src/utils/milkBagPumpUi';
+import { computeBagDayNight } from '@/src/utils/milkBagApi';
+import { resolveMilkBagSettings } from '@/src/utils/milk-bag-settings';
 
 async function handlePost(req: NextRequest, authContext: AuthResult) {
   // Check write permissions for expired accounts
@@ -37,27 +42,40 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
     if (!baby) {
       return NextResponse.json<ApiResponse<null>>({ success: false, error: 'Baby not found in this family.' }, { status: 404 });
     }
-    
+
     // Convert times to UTC for storage
     const startTimeUTC = toUTC(body.startTime);
     const endTimeUTC = body.endTime ? toUTC(body.endTime) : undefined;
-    
+
     // Calculate duration if not provided but start and end times are available
     let duration = body.duration;
     if (!duration && startTimeUTC && endTimeUTC) {
       duration = calculateDurationMinutes(startTimeUTC, endTimeUTC);
     }
-    
+
     // Calculate total amount if not provided but left and right amounts are
     let totalAmount = body.totalAmount;
     if (totalAmount === undefined && (body.leftAmount !== undefined || body.rightAmount !== undefined)) {
       totalAmount = (body.leftAmount || 0) + (body.rightAmount || 0);
     }
-    
+
     // Validate pumpAction
     const pumpAction = body.pumpAction || 'STORED';
     if (!['STORED', 'FED', 'DISCARDED'].includes(pumpAction)) {
       return NextResponse.json<ApiResponse<null>>({ success: false, error: 'Invalid pump action. Must be STORED, FED, or DISCARDED.' }, { status: 400 });
+    }
+
+    // Plan the bag side of this pump (new-bag creation vs append vs none).
+    // The UI derives the day/night label from the pump start (display timezone);
+    // absent fields mean no bag intent — the API never invents inventory.
+    const bagPlan = planPumpBag({
+      appendToBagId: body.appendToBagId,
+      newBagDayNight: body.newBagDayNight,
+      pumpAction,
+      totalAmount,
+    });
+    if (!bagPlan.ok) {
+      return NextResponse.json<ApiResponse<null>>({ success: false, error: bagPlan.error }, { status: bagPlan.status });
     }
 
     // Validate/normalize the volume unit — an unknown unit silently corrupts
@@ -115,6 +133,27 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
     const trackingEnabled = familySettings?.enableBreastMilkTracking !== false;
 
     const pumpLog = await prisma.$transaction(async (tx) => {
+      // Create the bag inside the same transaction so an aborted pump
+      // never leaves an orphan bag (issue #9: milk goes into a MilkBag).
+      let createdBagId: string | null = null;
+      if (bagPlan.mode === 'new') {
+        const createdBag = await tx.milkBag.create({
+          data: {
+            babyId: body.babyId,
+            familyId: userFamilyId,
+            caretakerId: caretakerId ?? null,
+            label: null,
+            dayNight: bagPlan.dayNight,
+            storageLocation: 'fridge',
+            provenance: 'fresh',
+            amount: totalAmount as number, // planPumpBag gates mode 'new' on amount > 0
+            unitAbbr: unitAbbr ?? 'OZ',
+            startedAt: startTimeUTC,
+          },
+        });
+        createdBagId = createdBag.id;
+      }
+
       const createdPumpLog = await tx.pumpLog.create({
         data: {
           babyId: body.babyId,
@@ -129,11 +168,12 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
           notes: body.notes,
           caretakerId: caretakerId,
           familyId: userFamilyId,
-          milkBagId: milkBagId || null,
+          milkBagId: milkBagId || createdBagId,
         },
       });
 
-      // If appending to a bag, increment its total amount (converted to the bag's unit)
+      // If appending to an existing bag, increment its total amount (converted
+      // to the bag's unit). A freshly-created bag already holds the pump amount.
       if (milkBagId && totalAmount && unitAbbr) {
         const bag = await tx.milkBag.findUnique({
           where: { id: milkBagId },
@@ -145,7 +185,7 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
           await tx.milkBag.update({
             where: { id: milkBagId },
             data: { amount: bag.amount + converted },
-        });
+          });
         }
       }
 
@@ -263,27 +303,27 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
 
     // Process date fields and prepare data for update
     const data: any = {};
-    
+
     if (body.startTime) {
       data.startTime = toUTC(body.startTime);
     }
-    
+
     if (body.endTime) {
       data.endTime = toUTC(body.endTime);
     }
-    
+
     // Calculate duration if not provided but start and end times are available
     if (body.duration !== undefined) {
       data.duration = body.duration;
-    } else if ((body.startTime || existingPumpLog.startTime) && 
-              (body.endTime || existingPumpLog.endTime)) {
+    } else if ((body.startTime || existingPumpLog.startTime) &&
+      (body.endTime || existingPumpLog.endTime)) {
       const start = body.startTime ? toUTC(body.startTime) : existingPumpLog.startTime;
       const end = body.endTime ? toUTC(body.endTime) : existingPumpLog.endTime;
       if (start && end) {
         data.duration = calculateDurationMinutes(start, end);
       }
     }
-    
+
     // Calculate total amount if left or right amounts are updated
     if (body.totalAmount !== undefined) {
       data.totalAmount = body.totalAmount;
@@ -292,7 +332,7 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
       const rightAmount = body.rightAmount !== undefined ? body.rightAmount : existingPumpLog.rightAmount || 0;
       data.totalAmount = leftAmount + rightAmount;
     }
-    
+
     // Add other fields
     if (body.leftAmount !== undefined) data.leftAmount = body.leftAmount;
     if (body.rightAmount !== undefined) data.rightAmount = body.rightAmount;
@@ -311,7 +351,7 @@ async function handlePut(req: NextRequest, authContext: AuthResult) {
       ? body.totalAmount
       : (body.leftAmount !== undefined || body.rightAmount !== undefined)
         ? (body.leftAmount !== undefined ? body.leftAmount : existingPumpLog.leftAmount || 0) +
-          (body.rightAmount !== undefined ? body.rightAmount : existingPumpLog.rightAmount || 0)
+        (body.rightAmount !== undefined ? body.rightAmount : existingPumpLog.rightAmount || 0)
         : existingPumpLog.totalAmount;
     const finalPumpAction = body.pumpAction ?? existingPumpLog.pumpAction;
     const finalUnitAbbr = body.unitAbbr !== undefined ? body.unitAbbr : existingPumpLog.unitAbbr;
@@ -429,12 +469,12 @@ async function handleGet(req: NextRequest, authContext: AuthResult) {
     const babyId = searchParams.get('babyId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    
+
     const queryParams: any = {
       familyId: userFamilyId,
       ...(babyId && { babyId }),
     };
-    
+
     // Add date range filter if both start and end dates are provided
     if (startDate && endDate) {
       queryParams.startTime = {
@@ -446,7 +486,7 @@ async function handleGet(req: NextRequest, authContext: AuthResult) {
     // If ID is provided, fetch a single pump log
     if (id) {
       const pumpLog = await prisma.pumpLog.findFirst({
-        where: { 
+        where: {
           id,
           familyId: userFamilyId,
         },

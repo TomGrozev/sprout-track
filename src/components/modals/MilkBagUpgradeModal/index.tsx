@@ -29,16 +29,17 @@ import { upgradeModalStyles as styles } from './milk-bag-upgrade-modal.styles';
 import {
   MilkBagUpgradeModalProps,
   UpgradeRowState,
+  UpgradeModalTexts,
 } from './milk-bag-upgrade-modal.types';
+import { UpgradeChoiceScreen } from './UpgradeChoiceScreen';
+import { UpgradeBagRow } from './UpgradeBagRow';
 
 type Screen = 'choice' | 'convert';
 
 let nextRowId = 1;
 
-function authHeaders(): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+
+import { authHeaders } from '@/src/utils/authHeaders';
 
 function makeRow(): UpgradeRowState {
   const now = new Date();
@@ -241,6 +242,23 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   };
 
+  const choiceTexts: UpgradeModalTexts = {
+    intro: t('Choose how you want to start tracking your milk bags.'),
+    goingForwardTitle: t('Track going forward only'),
+    goingForwardDesc: t('Start tracking new pump sessions as bags. Your existing balance is left untouched.'),
+    convertTitle: t('Convert to bags'),
+    convertDesc: t('Turn your existing expressed-milk balance into individual bags you can manage and use.'),
+  };
+
+  const rowLabels = {
+    bag: t('Bag'),
+    remove: t('Remove'),
+    amount: t('Amount (ml)'),
+    baggedAt: t('Date and time'),
+    storage: t('Storage'),
+    dayNight: t('Day / Night'),
+  };
+
   return (
     <Modal
       open={open}
@@ -252,31 +270,12 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
     >
       <ModalContent>
         {screen === 'choice' && (
-          <div className={styles.choiceGrid}>
-            <p className="text-sm text-gray-600">{t('Choose how you want to start tracking your milk bags.')}</p>
-            <button
-              type="button"
-              className={cn(styles.choiceCard, 'mbupgrade-choiceCard')}
-              onClick={handleGoingForward}
-              disabled={submitting}
-            >
-              <span className={cn(styles.choiceCardTitle, 'mbupgrade-choiceCardTitle')}>{t('Track going forward only')}</span>
-              <span className={cn(styles.choiceCardDesc, 'mbupgrade-choiceCardDesc')}>
-                {t('Start tracking new pump sessions as bags. Your existing balance is left untouched.')}
-              </span>
-            </button>
-            <button
-              type="button"
-              className={cn(styles.choiceCard, 'mbupgrade-choiceCard')}
-              onClick={goConvert}
-              disabled={submitting}
-            >
-              <span className={cn(styles.choiceCardTitle, 'mbupgrade-choiceCardTitle')}>{t('Convert to bags')}</span>
-              <span className={cn(styles.choiceCardDesc, 'mbupgrade-choiceCardDesc')}>
-                {t('Turn your existing expressed-milk balance into individual bags you can manage and use.')}
-              </span>
-            </button>
-          </div>
+          <UpgradeChoiceScreen
+            texts={choiceTexts}
+            onConvert={goConvert}
+            onGoingForward={handleGoingForward}
+            submitting={submitting}
+          />
         )}
 
         {screen === 'convert' && (
@@ -299,61 +298,15 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
                 <p className="text-sm text-gray-500">{t('No bags yet. Add a bag or go back.')}</p>
               )}
               {rows.map((row) => (
-                <div key={row.id} className={cn(styles.row, 'mbupgrade-row')}>
-                  <div className={styles.rowHeader}>
-                    <span className={cn(styles.rowLabel, 'mbupgrade-rowLabel')}>{t('Bag')}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label={t('Remove')}
-                      onClick={() => setRows((rs) => rs.filter((r) => r.id !== row.id))}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className={styles.twoCol}>
-                    <div className="space-y-1">
-                      <Label className={cn(styles.fieldLabel, 'mbupgrade-fieldLabel')}>{t('Amount (ml)')}</Label>
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        placeholder="0"
-                        value={row.amount}
-                        onChange={(e) => updateRow(row.id, { amount: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className={cn(styles.fieldLabel, 'mbupgrade-fieldLabel')}>{t('Date and time')}</Label>
-                      <DateTimePicker
-                        value={row.baggedAt}
-                        onChange={(d) => updateRow(row.id, { baggedAt: d })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className={cn(styles.fieldLabel, 'mbupgrade-fieldLabel')}>{t('Storage')}</Label>
-                    <ToggleGroup
-                      aria-label={t('Storage')}
-                      options={storageOptions}
-                      value={row.storageLocation}
-                      onChange={(v) => updateRow(row.id, { storageLocation: v })}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className={cn(styles.fieldLabel, 'mbupgrade-fieldLabel')}>{t('Day / Night')}</Label>
-                    <ToggleGroup
-                      aria-label={t('Day / Night')}
-                      options={dayNightOptions}
-                      value={row.dayNight}
-                      onChange={(v) => updateRow(row.id, { dayNight: v })}
-                    />
-                  </div>
-                </div>
+                <UpgradeBagRow
+                  key={row.id}
+                  row={row}
+                  storageOptions={storageOptions}
+                  dayNightOptions={dayNightOptions}
+                  onRemove={() => setRows((rs) => rs.filter((r) => r.id !== row.id))}
+                  onUpdate={(patch) => updateRow(row.id, patch)}
+                  labels={rowLabels}
+                />
               ))}
             </div>
 

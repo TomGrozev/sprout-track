@@ -13,11 +13,8 @@ import type { MilkBagDTO, MilkBagTotals } from '@/src/types/milk-bag';
 import { buildBagRow } from '@/src/utils/milkBagInventoryUi';
 import { inventoryModalStyles as styles } from './milk-bag-inventory-modal.styles';
 import { MilkBagInventoryModalProps } from './milk-bag-inventory-modal.types';
+import { authHeaders } from '@/src/utils/authHeaders';
 
-function authHeaders(): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 export function MilkBagInventoryModal({
   open,
