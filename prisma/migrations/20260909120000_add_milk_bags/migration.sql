@@ -41,12 +41,10 @@ CREATE INDEX "MilkBag_startedAt_idx" ON "MilkBag"("startedAt");
 -- under the same constraint in restore/re-init flows).
 ALTER TABLE "PumpLog" ADD COLUMN "milkBagId" TEXT;
 ALTER TABLE "FeedLog" ADD COLUMN "milkBagId" TEXT;
-ALTER TABLE "FeedLog" ADD COLUMN "sourceBagId" TEXT;
 
 -- Link indexes (SQLite 3.35+ allows index over columns added in-session)
 CREATE INDEX "PumpLog_milkBagId_idx" ON "PumpLog"("milkBagId");
 CREATE INDEX "FeedLog_milkBagId_idx" ON "FeedLog"("milkBagId");
-CREATE INDEX "FeedLog_sourceBagId_idx" ON "FeedLog"("sourceBagId");
 
 -- Family-level milk-bag settings (day/night boundary, freezer type, upgrade marker)
 
@@ -55,4 +53,6 @@ ALTER TABLE "Settings" ADD COLUMN "milkBagSettings" TEXT;
 
 -- Notification type for opt-in milk-expiry pushes (NotificationEventType enum is DB-level TEXT)
 ALTER TABLE "MilkBag" ADD COLUMN "expiryNotifiedAt" DATETIME;
+-- Bag links on existing tables. SQLite cannot add FK constraints via ALTER TABLE,
+-- so the PumpLog.milkBagId / FeedLog.milkBagId columns are
 

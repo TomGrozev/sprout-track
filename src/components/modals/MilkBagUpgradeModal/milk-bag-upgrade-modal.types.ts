@@ -17,3 +17,12 @@ export type UpgradeRowState = {
   storageLocation: 'room' | 'fridge' | 'freezer';
   dayNight: 'day' | 'night';
 };
+
+/** Localized strings handed down from the container to sub-components. */
+export interface UpgradeModalTexts {
+  intro: string;
+  goingForwardTitle: string;
+  goingForwardDesc: string;
+  convertTitle: string;
+  convertDesc: string;
+}
