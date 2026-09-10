@@ -22,7 +22,7 @@ import { DateTimePickerProps } from './date-time-picker.types';
 import {
   dateTimePickerContainerStyles,
   dateTimePickerButtonStyles,
-  dateTimePickerPopoverContentStyles,
+  dateTimePickerContentStyles,
   dateTimePickerCalendarContainerStyles,
   dateTimePickerTimeContainerStyles,
   dateTimePickerFooterStyles, // Keep footer style for potential future use or spacing
@@ -152,7 +152,7 @@ export function DateTimePicker({
           </Button>
         </PopoverTrigger>
         <PopoverContent 
-          className={cn(dateTimePickerPopoverContentStyles, "date-time-picker-popover")}
+          className={cn(dateTimePickerContentStyles, "date-time-picker-popover")}
           align="start"
           sideOffset={4}
         >
@@ -183,7 +183,7 @@ export function DateTimePicker({
           </Button>
         </PopoverTrigger>
         <PopoverContent 
-          className={cn(dateTimePickerPopoverContentStyles, "date-time-picker-popover")}
+          className={cn(dateTimePickerContentStyles, "date-time-picker-popover")}
           align="start"
           sideOffset={4}
           onOpenAutoFocus={handleOpenAutoFocus}

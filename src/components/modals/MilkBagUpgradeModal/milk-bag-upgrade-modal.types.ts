@@ -13,7 +13,8 @@ export interface MilkBagUpgradeModalProps {
 export type UpgradeRowState = {
   id: number;
   amount: string;
-  baggedAt: Date;
+  /** Local calendar day the milk was bagged; DatePicker always supplies midnight (00:00 local) — input is date-only. */
+  baggedDate: Date;
   storageLocation: 'room' | 'fridge' | 'freezer';
   dayNight: 'day' | 'night';
 };

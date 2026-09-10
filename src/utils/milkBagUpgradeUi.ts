@@ -21,8 +21,8 @@ export const DEFAULT_UPGRADE_STORAGE: StorageLocation = 'freezer';
 export type UpgradeRowInput = {
  /** Amount in `unitAbbr` (or ML when unset). */
  amount: number;
- /** Local wall-clock bag date; serialized to ISO for the request. */
- baggedAt: Date;
+ /** Local calendar day the milk was bagged; the DatePicker supplies midnight (00:00 local). */
+ baggedDate: Date;
  storageLocation?: StorageLocation;
  dayNight: DayNight;
  unitAbbr?: string | null;
@@ -39,7 +39,7 @@ export function rowsToBags(rows: UpgradeRowInput[]): MilkBagUpgradeRequest['bags
   if (!Number.isFinite(r.amount) || r.amount <= 0) {
    throw new Error('milk-bag-invalid-amount');
   }
-  if (!(r.baggedAt instanceof Date) || Number.isNaN(r.baggedAt.getTime())) {
+   if (!(r.baggedDate instanceof Date) || Number.isNaN(r.baggedDate.getTime())) {
    throw new Error('milk-bag-invalid-date');
   }
   // Absent unitAbbr means the row is already in the modal's ML unit — only
@@ -48,11 +48,23 @@ export function rowsToBags(rows: UpgradeRowInput[]): MilkBagUpgradeRequest['bags
   const amount = unit && unit !== 'ML' ? convertVolume(r.amount, unit, 'ML') : r.amount;
   return {
    amount,
-   baggedAt: r.baggedAt.toISOString(),
+     baggedAt: serializeBagDate(r.baggedDate),
    storageLocation: r.storageLocation ?? DEFAULT_UPGRADE_STORAGE,
    dayNight: r.dayNight,
   };
  });
+}
+
+/**
+ * Bag rows are days; a midnight date D means 'day D'. Expiry compares
+ * baggedAt + shelf-life against Date.now(), so midnight D would read ~24h
+ * earlier than any moment of day D — emit end-of-day instead.
+ */
+function serializeBagDate(d: Date): string {
+  if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).toISOString();
+  }
+  return d.toISOString();
 }
 
 export type UpgradeRunningSum = {
