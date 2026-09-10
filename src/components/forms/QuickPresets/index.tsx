@@ -9,6 +9,7 @@ import {
  QuickPreset,
  QuickPresetRecord,
  THIRTY_DAYS_MS,
+  truncateNoteLabel,
 } from '@/src/utils/quickPreset';
 import { useLocalization } from '@/src/context/localization';
 import { DiaperLogResponse, FeedLogResponse } from '@/app/api/types';
@@ -85,6 +86,12 @@ function labelFor(kind: QuickPresetsProps['kind'], key: string, value: string | 
 }
 
 function composeLabel(kind: QuickPresetsProps['kind'], preset: QuickPreset, t: (k: string) => string): string {
+ // A notes-derived "other" chip labels itself with the truncated note
+ // rather than its field values; the note is not translated.
+ const note = preset.values.notes;
+ if (note !== undefined) {
+  return `${t('Other')} · ${truncateNoteLabel(String(note))}`;
+ }
  return Object.keys(preset.values)
   .map((key) => labelFor(kind, key, preset.values[key], t))
   .join(' · ');
@@ -104,20 +111,27 @@ function toPresetRecords(
     !row.deletedAt &&
     !(kind === 'feed' && (row as FeedLogResponse).type === 'SOLIDS')
   )
-  .map((row) => ({
-   time: row.time,
-   values:
-    kind === 'diaper'
-     ? {
-      type: clean((row as DiaperLogResponse).type),
-      condition: clean((row as DiaperLogResponse).condition),
-      color: clean((row as DiaperLogResponse).color),
-     }
-     : {
-      type: clean((row as FeedLogResponse).type),
-      bottleType: clean((row as FeedLogResponse).bottleType),
-     },
-  }));
+  .map((row) => {
+   // Notes rejoin the applied values so a notes chip carries the full note.
+   // Trimmed here; empty/whitespace-only notes are treated as absent.
+   const rawNotes = clean((row as DiaperLogResponse | FeedLogResponse).notes);
+   const notes = typeof rawNotes === 'string' && rawNotes.trim() !== '' ? rawNotes.trim() : undefined;
+   return {
+    time: row.time,
+    values:
+     kind === 'diaper'
+      ? {
+       type: clean((row as DiaperLogResponse).type),
+       condition: clean((row as DiaperLogResponse).condition),
+       color: clean((row as DiaperLogResponse).color),
+      }
+      : {
+       type: clean((row as FeedLogResponse).type),
+       bottleType: clean((row as FeedLogResponse).bottleType),
+      },
+    ...(notes ? { notes } : {}),
+   };
+  });
 }
 
 export default function QuickPresets({

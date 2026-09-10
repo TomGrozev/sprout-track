@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import DiaperForm from '@/src/components/forms/DiaperForm';
 import FeedForm from '@/src/components/forms/FeedForm';
 import QuickPresets from '@/src/components/forms/QuickPresets';
+import { truncateNoteLabel } from '@/src/utils/quickPreset';
 import { LocalizationProvider } from '@/src/context/localization';
 import { ThemeProvider } from '@/src/context/theme';
 import { TimezoneProvider } from '@/app/context/timezone';
@@ -87,6 +88,39 @@ describe('QuickPresets (issue #7)', () => {
     });
   });
 
+  it('renders a single live row as chip 1 even though it is a one-off', async () => {
+    // One live row alone would previously be below minFrequency(2) and produce
+    // no chip; recent-first now always surfaces it.
+    stubFetch('/api/diaper-log?', [
+      {
+        id: '1',
+        time: recentTime(),
+        type: 'BOTH',
+        condition: 'NORMAL',
+        color: 'YELLOW',
+        blowout: false,
+        creamApplied: false,
+        deletedAt: null,
+      },
+    ]);
+
+    render(
+      <ThemeProvider>
+        <LocalizationProvider>
+          <TimezoneProvider>
+            <ToastProvider>
+              <QuickPresets kind="diaper" babyId="baby-1" isOpen onApply={vi.fn()} />
+            </ToastProvider>
+          </TimezoneProvider>
+        </LocalizationProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Wet and Dirty/ })).toBeTruthy();
+    });
+  });
+
   it('renders a feed preset chip and pre-fills the breast mode', async () => {
     // The two Breast rows form one preset; everything else (photos,
     // settings, last-log lookups) resolves empty so the form stays pristine.
@@ -132,11 +166,30 @@ describe('QuickPresets (issue #7)', () => {
     });
   });
 
-  it('excludes soft-deleted logs and legacy SOLIDS feeds, rendering no chips', async () => {
-    // Diaper: one live + one soft-deleted row → below minFrequency → no chip.
+  it('excludes soft-deleted logs so a deleted row never becomes the recent chip', async () => {
+    // The soft-deleted DIRTY row is the newest; if it were (incorrectly) kept
+    // it would be the recent chip. With it filtered out, the live WET row wins.
     stubFetch('/api/diaper-log?', [
-      { id: '1', time: recentTime(), type: 'BOTH', condition: 'NORMAL', color: 'YELLOW', deletedAt: null },
-      { id: '2', time: recentTime(), type: 'BOTH', condition: 'NORMAL', color: 'YELLOW', deletedAt: '2026-01-01T00:00:00Z' },
+      {
+        id: '1',
+        time: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+        type: 'WET',
+        condition: null,
+        color: null,
+        blowout: false,
+        creamApplied: false,
+        deletedAt: null,
+      },
+      {
+        id: '2',
+        time: new Date(Date.now() - 60 * 1000).toISOString(),
+        type: 'DIRTY',
+        condition: null,
+        color: null,
+        blowout: false,
+        creamApplied: false,
+        deletedAt: '2026-01-01T00:00:00Z',
+      },
     ]);
 
     render(
@@ -144,21 +197,58 @@ describe('QuickPresets (issue #7)', () => {
         <LocalizationProvider>
           <TimezoneProvider>
             <ToastProvider>
-              <QuickPresets
-                kind="diaper"
-                babyId="baby-1"
-                isOpen
-                onApply={vi.fn()}
-              />
+              <QuickPresets kind="diaper" babyId="baby-1" isOpen onApply={vi.fn()} />
             </ToastProvider>
           </TimezoneProvider>
         </LocalizationProvider>
       </ThemeProvider>
     );
 
-    // Only one non-deleted row remains → below minFrequency(2) → nothing.
     await waitFor(() => {
-      expect(screen.queryByRole('button')).toBeNull();
+      expect(screen.getByRole('button', { name: /Wet/ })).toBeTruthy();
+    });
+    expect(screen.queryByRole('button', { name: /Dirty/ })).toBeNull();
+  });
+
+  it('renders a notes-derived "other" chip and applies the full note to the form', async () => {
+    const note = 'buy more wipes and diapers soon';
+    // Two identical BOTH rows carrying the same note → one "other" chip whose
+    // label is t('Other') + a 24-char-truncated note; clicking applies the
+    // FULL (untruncated) note to the form's notes field.
+    stubFetch('/api/diaper-log?', [
+      {
+        id: '1',
+        time: recentTime(),
+        type: 'BOTH',
+        condition: 'NORMAL',
+        color: 'YELLOW',
+        notes: note,
+        blowout: false,
+        creamApplied: false,
+        deletedAt: null,
+      },
+      {
+        id: '2',
+        time: recentTime(),
+        type: 'BOTH',
+        condition: 'NORMAL',
+        color: 'YELLOW',
+        notes: note,
+        blowout: false,
+        creamApplied: false,
+        deletedAt: null,
+      },
+    ]);
+
+    renderDiaper();
+
+    const expectedLabel = `Other · ${truncateNoteLabel(note)}`;
+    const chip = await screen.findByRole('button', { name: expectedLabel });
+    fireEvent.click(chip);
+
+    await waitFor(() => {
+      const notesField = screen.getByPlaceholderText('Enter any notes about the diaper change');
+      expect((notesField as HTMLTextAreaElement).value).toBe(note);
     });
   });
 
@@ -175,12 +265,7 @@ describe('QuickPresets (issue #7)', () => {
         <LocalizationProvider>
           <TimezoneProvider>
             <ToastProvider>
-              <QuickPresets
-                kind="feed"
-                babyId="baby-1"
-                isOpen
-                onApply={vi.fn()}
-              />
+              <QuickPresets kind="feed" babyId="baby-1" isOpen onApply={vi.fn()} />
             </ToastProvider>
           </TimezoneProvider>
         </LocalizationProvider>

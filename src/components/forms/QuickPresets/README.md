@@ -35,12 +35,27 @@ soft-deletes → map rows → build → render chips.
     inputs, not `formData.side`), amounts/units are excluded to avoid
     fragmenting patterns, and legacy SOLIDS rows are filtered out because
     the form can no longer create that mode (solids go through Food).
+  - Both also carry an optional trimmed `notes` when the row has one
+    (whitespace-only notes are dropped). Notes never shape a field combo;
+    they feed the notes-derived "other" chips below.
 - **Ranking**: `buildQuickPresets(rows, { now, fields })` with default options
-  (top 3, min 2 occurrences).
+  (top 3, min 2 occurrences). Two rules apply:
+  - **Recent-first**: the newest in-window record's field combo is always chip 1,
+    even when it is a one-off (below `minFrequency`). The remaining slots fill
+    from the popular field combos *excluding* that recent combo, so the recent
+    combo never appears twice. If no valid in-window record exists (malformed /
+    out-of-window), the list degrades to the popular candidates alone.
+  - **Notes "other" chips**: rows sharing an identical trimmed note form a
+    candidate (min 2 occurrences) whose applied values come from the group's
+    most recent row's fields **plus** the full trimmed note under `notes`.
+    These compete with the popular field combos for the remaining slots.
 - **Chip labels**: preset values joined with ` · ` in field order, each rendered
   through `t()`. Raw enum values are mapped to display labels first (e.g.
   diaper `BOTH` → `t('Wet and Dirty')`); feed `bottleType` is already a display
-  string and passes through.
+  string and passes through. A notes chip's label is instead
+  `t('Other') · <note truncated to 24 chars>`, where the truncation is purely
+  display — clicking still applies the **full** note text to the form.
+  Truncation comes from the kernel's `truncateNoteLabel` / `MAX_NOTE_LABEL_LENGTH`.
 - **Click** → `onApply(preset.values)`. The owning form owns the state merge.
 - **Rendering `null`** when: no `babyId`, fetch failed, still loading, or zero
   presets. Failures are silent (`console.error`) — a broken suggestion strip
