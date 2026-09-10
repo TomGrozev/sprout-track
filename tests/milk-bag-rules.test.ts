@@ -186,4 +186,27 @@ describe('convertLegacyBalance (guided convert-to-bags math)', () => {
     expect(convertLegacyBalance(300, []).ok).toBe(false);
     expect(convertLegacyBalance(0, []).ok).toBe(true);
   });
+
+  it('allowExceeds permits an overshoot as ok with zero leftover', () => {
+    const r = convertLegacyBalance(300, [
+      { amountMl: 200, baggedAt: new Date(), storageLocation: 'freezer', dayNight: 'day' },
+      { amountMl: 150, baggedAt: new Date(), storageLocation: 'freezer', dayNight: 'day' },
+    ], { allowExceeds: true });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.leftoverMl).toBe(0);
+    }
+  });
+
+  it('allowExceeds still rejects an empty conversion of a non-zero balance', () => {
+    const r = convertLegacyBalance(300, [], { allowExceeds: true });
+    expect(r.ok).toBe(false);
+  });
+
+  it('without allowExceeds an overshoot stays rejected (strict default)', () => {
+    const r = convertLegacyBalance(300, [
+      { amountMl: 400, baggedAt: new Date(), storageLocation: 'freezer', dayNight: 'day' },
+    ]);
+    expect(r).toEqual({ ok: false, reason: 'exceeds-total' });
+  });
 });

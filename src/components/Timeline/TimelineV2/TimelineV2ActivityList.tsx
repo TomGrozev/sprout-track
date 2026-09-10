@@ -82,7 +82,7 @@ const TimelineV2ActivityList = ({
     }
     return notes;
   };
-  
+
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Group activities by time of day
@@ -114,18 +114,18 @@ const TimelineV2ActivityList = ({
       evening: [],
       night: [],
     };
-    
+
     activities.forEach(activity => {
       let groupingTime: Date;
-      
+
       // Special logic for sleep activities
       if ('duration' in activity && 'startTime' in activity && activity.endTime) {
         const startTime = new Date(activity.startTime);
         const endTime = new Date(activity.endTime);
-        
+
         const startDate = startTime.toDateString();
         const endDate = endTime.toDateString();
-        
+
         if (startDate === endDate) {
           groupingTime = startTime;
         } else {
@@ -133,7 +133,7 @@ const TimelineV2ActivityList = ({
           const viewingDateStr = viewingDate.toDateString();
           const startDateStr = startTime.toDateString();
           const endDateStr = endTime.toDateString();
-          
+
           if (startDateStr === viewingDateStr) {
             groupingTime = startTime;
           } else if (endDateStr === viewingDateStr) {
@@ -145,11 +145,11 @@ const TimelineV2ActivityList = ({
       } else {
         groupingTime = new Date(getActivityTime(activity));
       }
-      
+
       const timeOfDay = getTimeOfDay(groupingTime);
       groups[timeOfDay].push(activity);
     });
-    
+
     // Sort activities within each group (newest first)
     Object.keys(groups).forEach(key => {
       groups[key].sort((a, b) => {
@@ -158,7 +158,7 @@ const TimelineV2ActivityList = ({
         return timeB.getTime() - timeA.getTime();
       });
     });
-    
+
     // Return groups in order: night (9 PM-12 AM), evening, afternoon, morning, early-morning (12 AM-6 AM)
     return [
       { timeOfDay: 'night', activities: groups.night },
@@ -173,8 +173,8 @@ const TimelineV2ActivityList = ({
   return (
     <>
       {/* Scrollable Content */}
-      <div 
-        className="h-full overflow-y-auto relative bg-white timeline-activity-scroll-container" 
+      <div
+        className="h-full overflow-y-auto relative bg-white timeline-activity-scroll-container"
         ref={contentRef}
       >
         {/* Timeline View */}
@@ -204,7 +204,7 @@ const TimelineV2ActivityList = ({
                           {getTimeOfDayLabel(group.timeOfDay)}
                         </div>
                       </div>
-                      
+
                       {/* Activities in this time period */}
                       <div className="space-y-0 pb-4">
                         {group.activities.map((activity, activityIndex) => {
@@ -219,16 +219,16 @@ const TimelineV2ActivityList = ({
                             ? ({ '--badge-bg': badgeOption.hex, '--badge-fg': getBadgeTextColor(badgeOption.hex) } as React.CSSProperties)
                             : undefined;
                           let timeStr: string;
-                          
+
                           if ('duration' in activity && 'startTime' in activity) {
                             const startTime = new Date(activity.startTime);
                             const startDateStr = startTime.toDateString();
-                            
+
                             if (activity.endTime) {
                               const endTime = new Date(activity.endTime);
                               const endDateStr = endTime.toDateString();
                               const isOvernight = startDateStr !== endDateStr;
-                              
+
                               const startTimeStr = formatTimeDisplay(startTime, timeFormat);
                               const endTimeStr = formatTimeDisplay(endTime, timeFormat);
 
@@ -246,7 +246,7 @@ const TimelineV2ActivityList = ({
                           } else {
                             timeStr = formatTimeDisplay(activityTime, timeFormat);
                           }
-                          
+
                           const getActivityColor = (bgClass: string) => {
                             if (bgClass.includes('bg-gradient-to-br from-gray-400')) return '#9ca3af'; // gray-400 - matches old timeline
                             if (bgClass.includes('bg-sky-200')) return '#7dd3fc'; // sky-300 - matches old timeline
@@ -263,9 +263,9 @@ const TimelineV2ActivityList = ({
                             if (bgClass.includes('bg-[#BBD444]')) return '#BBD444'; // lime - food
                             return '#9ca3af'; // default gray
                           };
-                          
+
                           const activityColor = getActivityColor(style.bg);
-                          
+
                           // Determine activity type class for styling
                           // Check play and pump FIRST since they also have duration and startTime
                           let activityTypeClass = '';
@@ -289,7 +289,7 @@ const TimelineV2ActivityList = ({
                               activityTypeClass = 'medicine';
                             }
                           }
-                          
+
                           return (
                             <motion.div
                               key={activity.id}
@@ -313,7 +313,7 @@ const TimelineV2ActivityList = ({
                               <div className={`flex-shrink-0 event-icon ${activityTypeClass}`}>
                                 {getActivityIcon(activity)}
                               </div>
-                              
+
                               {/* Event Content */}
                               <div className="flex-1 min-w-0 event-content">
                                 <div className="flex items-center gap-1.5 mb-0.5 min-w-0">
@@ -355,10 +355,11 @@ const TimelineV2ActivityList = ({
                                     // Breast milk adjustment before pump
                                     if ('reason' in activity && 'amount' in activity && !('type' in activity) && !('leftAmount' in activity)) {
                                       const amt = (activity as any).amount;
+                                      const roundedAmt = Math.round(amt * 100) / 100;
                                       const unit = ((activity as any).unitAbbr || 'oz').toLowerCase();
                                       const reason = (activity as any).reason || '';
-                                      const sign = amt >= 0 ? '+' : '';
-                                      return `${sign}${amt} ${unit}${reason ? ` (${t(reason)})` : ''}`;
+                                      const sign = roundedAmt >= 0 ? '+' : '';
+                                      return `${sign}${roundedAmt} ${unit}${reason ? ` (${t(reason)})` : ''}`;
                                     }
 
                                     // Pumping before duration check as it also has duration
@@ -369,11 +370,11 @@ const TimelineV2ActivityList = ({
                                       if ((activity as any).leftAmount) amounts.push(`${t('L:')} ${(activity as any).leftAmount} ${unit}`);
                                       if ((activity as any).rightAmount) amounts.push(`${t('R:')} ${(activity as any).rightAmount} ${unit}`);
                                       if ('duration' in activity && activity.duration) {
-                                        amounts.push( `${activity.duration}m`);
+                                        amounts.push(`${activity.duration}m`);
                                       }
                                       return amounts.join(' • ');
                                     }
-                                    
+
                                     // Play activity - check before sleep/duration
                                     if ('activities' in activity && 'type' in activity && ['TUMMY_TIME', 'INDOOR_PLAY', 'OUTDOOR_PLAY', 'WALK', 'CUSTOM'].includes((activity as any).type)) {
                                       const parts = [];
@@ -399,7 +400,7 @@ const TimelineV2ActivityList = ({
                                       }
                                       return parts.length > 0 ? parts.join(' • ') : t('Sleep');
                                     }
-                                    
+
                                     if ('amount' in activity && 'type' in activity) {
                                       if (activity.type === 'BREAST') {
                                         const side = activity.side ? (resolveBreastSideLabel(activity.side, settings) ?? t(activity.side === 'LEFT' ? 'Left Side' : 'Right Side')) : '';
@@ -451,7 +452,7 @@ const TimelineV2ActivityList = ({
                                         return parts.join(' • ');
                                       }
                                     }
-                                    
+
                                     if ('condition' in activity) {
                                       const details = [];
                                       if (activity.condition) {
@@ -473,13 +474,13 @@ const TimelineV2ActivityList = ({
                                       }
                                       return details.length > 0 ? details.join(' • ') : t('Diaper');
                                     }
-                                    
+
                                     if ('content' in activity) {
-                                      return activity.content.length > 50 ? 
-                                        activity.content.substring(0, 50) + '...' : 
+                                      return activity.content.length > 50 ?
+                                        activity.content.substring(0, 50) + '...' :
                                         activity.content;
                                     }
-                                    
+
                                     if ('soapUsed' in activity) {
                                       const details = [];
                                       if (activity.soapUsed) details.push(t('Soap'));
@@ -494,7 +495,7 @@ const TimelineV2ActivityList = ({
                                       }
                                       return details.join(' • ');
                                     }
-                                    
+
                                     if ('vaccineName' in activity) {
                                       const parts = [(activity as any).vaccineName];
                                       if ((activity as any).doseNumber) parts.push(`${t('Dose')} #${(activity as any).doseNumber}`);
@@ -507,7 +508,7 @@ const TimelineV2ActivityList = ({
                                         activity.title;
                                       return title;
                                     }
-                                    
+
                                     if ('value' in activity && 'unit' in activity) {
                                       if ('type' in activity && activity.type === 'WEIGHT') {
                                         return formatWeightDisplay(activity.value, activity.unit);
@@ -516,7 +517,7 @@ const TimelineV2ActivityList = ({
                                         activity.unit : activity.unit.toLowerCase();
                                       return `${activity.value} ${unit}`;
                                     }
-                                    
+
                                     if ('doseAmount' in activity && 'medicineId' in activity) {
                                       const unit = unitSymbol(activity.unitAbbr);
                                       const dose = activity.doseAmount ? `${activity.doseAmount} ${unit}`.trim() : '';
@@ -531,7 +532,7 @@ const TimelineV2ActivityList = ({
                                       }
                                       return `${medName} - ${dose}`;
                                     }
-                                    
+
                                     return t('Activity logged');
                                   })()}
                                 </div>

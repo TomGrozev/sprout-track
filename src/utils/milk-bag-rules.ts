@@ -133,7 +133,11 @@ export type ConversionResult =
  * is allowed but surfaces leftoverMl so the UI can ask "discard leftover X?"; an
  * overshoot is rejected. The legacy balance then decrements by the bagged amount.
  */
-export function convertLegacyBalance(legacyTotalMl: number, bags: LegacyBagInput[]): ConversionResult {
+export function convertLegacyBalance(
+ legacyTotalMl: number,
+ bags: LegacyBagInput[],
+ opts?: { allowExceeds?: boolean },
+): ConversionResult {
  if (!Number.isFinite(legacyTotalMl) || legacyTotalMl < 0) return { ok: false, reason: 'invalid-amount' };
  if (bags.length === 0) {
   return legacyTotalMl === 0 ? { ok: true, leftoverMl: 0 } : { ok: false, reason: 'empty-for-nonzero-total' };
@@ -141,6 +145,9 @@ export function convertLegacyBalance(legacyTotalMl: number, bags: LegacyBagInput
  const invalid = bags.find((b) => !Number.isFinite(b.amountMl) || b.amountMl <= 0);
  if (invalid) return { ok: false, reason: 'invalid-amount' };
  const baggedMl = bags.reduce((s, b) => s + b.amountMl, 0);
- if (baggedMl > legacyTotalMl) return { ok: false, reason: 'exceeds-total' };
+ if (baggedMl > legacyTotalMl) {
+  if (opts?.allowExceeds) return { ok: true, leftoverMl: 0 };
+  return { ok: false, reason: 'exceeds-total' };
+ }
  return { ok: true, leftoverMl: legacyTotalMl - baggedMl };
 }

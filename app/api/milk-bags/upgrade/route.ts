@@ -14,7 +14,7 @@ import prisma from '../../db';
 import { withAuthContext, AuthResult } from '../../utils/auth';
 import { toUTC } from '../../utils/timezone';
 import { checkWritePermission } from '../../utils/writeProtection';
-import { rowToMilkBagDTO, computeBagDayNight, mapUpgradeInput, convertLegacyToOz } from '@/src/utils/milkBagApi';
+import { rowToMilkBagDTO, computeBagDayNight, mapUpgradeInput, adjustmentDebitMl } from '@/src/utils/milkBagApi';
 import { MilkBagUpgradeRequest, MilkBagsResponse } from '@/src/types/milk-bag';
 import { inventoryTotals, convertLegacyBalance } from '@/src/utils/milk-bag-rules';
 import { loadMilkBagSettings } from '@/src/utils/milk-bag-settings';
@@ -64,7 +64,9 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
   // Map to LegacyBagInput for convertLegacyBalance validation
   const legacyBags: LegacyBagInput[] = mapUpgradeInput(body).bagInput;
 
-  const conversionResult = convertLegacyBalance(legacyTotalMl, legacyBags);
+  const conversionResult = convertLegacyBalance(legacyTotalMl, legacyBags, {
+   allowExceeds: body.allowExceedsTotal === true,
+  });
   if (!conversionResult.ok) {
    return NextResponse.json(
     { success: false, error: `Conversion failed: ${conversionResult.reason}` },
@@ -103,15 +105,17 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
     newBagIds.push(created.id);
    }
 
-   const totalBaggedOz = bagsInput.reduce(
-    (s: number, b: { amount: number }) => s + convertLegacyToOz(b.amount), 0,
-   );
+   // Debit the legacy balance by the bagged amount, clamped to the legacy total so
+   // the legacy balance never goes negative (allowExceeds permits a bagged excess
+   // without debiting it). Stored in ML — the unit the whole upgrade flow speaks.
+   const baggedMl = bagsInput.reduce((s: number, b: { amount: number }) => s + b.amount, 0);
+   const debitMl = adjustmentDebitMl(baggedMl, legacyTotalMl);
    await tx.breastMilkAdjustment.create({
     data: {
      babyId, familyId: userFamilyId, caretakerId: caretakerId ?? null,
      time: new Date(),
-     amount: -totalBaggedOz,
-     unitAbbr: 'OZ', reason: 'Converted to bags',
+     amount: debitMl === 0 ? 0 : -debitMl,
+     unitAbbr: 'ML', reason: 'Converted to bags',
     },
    });
   });

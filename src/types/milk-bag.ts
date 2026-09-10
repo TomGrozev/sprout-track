@@ -89,6 +89,9 @@ export type MilkBagUpgradeRequest = {
  }>;
  /** When bags under-sum the legacy total: true records the leftover as discarded. */
  discardLeftover: boolean;
+ /** When true, bags may sum above the legacy total; the legacy balance is clamped so
+  *  it never goes negative (the bagged excess is allowed, not debited). Default false. */
+  allowExceedsTotal?: boolean;
 };
 
 // Feed-from-bag (`milkBagId`) and pump-to-bag (`appendToBagId`) fields live inline on

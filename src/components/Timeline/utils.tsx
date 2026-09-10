@@ -536,7 +536,7 @@ export const getActivityDetails = (activity: ActivityType, settings: Settings | 
   if ('reason' in activity && 'amount' in activity && !('type' in activity) && !('leftAmount' in activity)) {
     const adjDetails = [
       { label: t('Time'), value: formatTime((activity as any).time, settings, true, t) },
-      { label: t('Amount'), value: `${(activity as any).amount > 0 ? '+' : ''}${(activity as any).amount} ${(activity as any).unitAbbr || 'oz'}` },
+      { label: t('Amount'), value: `${(activity as any).amount > 0 ? '+' : ''}${Math.round((activity as any).amount * 100) / 100} ${(activity as any).unitAbbr || 'oz'}` },
     ];
     if ((activity as any).reason) {
       adjDetails.push({ label: t('Reason'), value: t((activity as any).reason) });
@@ -1008,13 +1008,14 @@ export const getActivityDescription = (activity: ActivityType, settings: Setting
   // Breast milk adjustment description
   if ('reason' in activity && 'amount' in activity && !('type' in activity) && !('leftAmount' in activity)) {
     const amount = (activity as any).amount;
-    const sign = amount > 0 ? '+' : '';
+    const rounded = Math.round(amount * 100) / 100;
+    const sign = rounded > 0 ? '+' : '';
     const reason = (activity as any).reason ? ` (${t((activity as any).reason)})` : '';
     const unit = getSymbol((activity as any).unitAbbr || 'oz', t);
     const time = formatTime((activity as any).time, settings, true, t);
     return {
       type: t('Breast Milk Adjustment'),
-      details: [`${sign}${amount} ${unit}`, reason, time].filter(Boolean).join(' • ')
+      details: [`${sign}${rounded} ${unit}`, reason, time].filter(Boolean).join(' • ')
     };
   }
 

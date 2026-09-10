@@ -85,12 +85,12 @@ describe('computeUpgradeSum', () => {
       { amount: 100 },
       { amount: 50 },
     ]);
-    expect(sum).toEqual({ baggedMl: 150, leftoverMl: 150, exceeds: false });
+    expect(sum).toEqual({ baggedMl: 150, leftoverMl: 150, exceeds: false, exceededMl: 0 });
   });
 
   it('reports zero leftover when bags exactly match the total', () => {
     const sum = computeUpgradeSum(100, [{ amount: 40 }, { amount: 60 }]);
-    expect(sum).toEqual({ baggedMl: 100, leftoverMl: 0, exceeds: false });
+    expect(sum).toEqual({ baggedMl: 100, leftoverMl: 0, exceeds: false, exceededMl: 0 });
   });
 
   it('flags exceeds when bags over-sum the legacy total', () => {
@@ -98,6 +98,7 @@ describe('computeUpgradeSum', () => {
     expect(sum.baggedMl).toBe(120);
     expect(sum.exceeds).toBe(true);
     expect(sum.leftoverMl).toBe(0);
+    expect(sum.exceededMl).toBe(20);
   });
 
   it('converts per-row units to ML for the readout', () => {
@@ -120,12 +121,20 @@ describe('computeUpgradeSum', () => {
 
   it('ignores empty/non-positive rows', () => {
     const sum = computeUpgradeSum(200, [{ amount: 0 }, { amount: NaN }, { amount: -3 }, { amount: 50 }]);
-    expect(sum).toEqual({ baggedMl: 50, leftoverMl: 150, exceeds: false });
+    expect(sum).toEqual({ baggedMl: 50, leftoverMl: 150, exceeds: false, exceededMl: 0 });
   });
 
   it('empty bags leave the full legacy as leftover', () => {
     const sum = computeUpgradeSum(120, []);
-    expect(sum).toEqual({ baggedMl: 0, leftoverMl: 120, exceeds: false });
+    expect(sum).toEqual({ baggedMl: 0, leftoverMl: 120, exceeds: false, exceededMl: 0 });
+  });
+
+  it('yields leftover 0 + overshoot amount when bags exceed the balance', () => {
+    const sum = computeUpgradeSum(100, [{ amount: 80 }, { amount: 40 }]);
+    expect(sum.exceeds).toBe(true);
+    expect(sum.leftoverMl).toBe(0);
+    expect(sum.exceededMl).toBe(20);
+    expect(sum.baggedMl).toBe(120);
   });
 });
 

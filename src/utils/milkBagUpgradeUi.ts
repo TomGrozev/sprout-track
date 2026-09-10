@@ -39,7 +39,7 @@ export function rowsToBags(rows: UpgradeRowInput[]): MilkBagUpgradeRequest['bags
   if (!Number.isFinite(r.amount) || r.amount <= 0) {
    throw new Error('milk-bag-invalid-amount');
   }
-   if (!(r.baggedDate instanceof Date) || Number.isNaN(r.baggedDate.getTime())) {
+  if (!(r.baggedDate instanceof Date) || Number.isNaN(r.baggedDate.getTime())) {
    throw new Error('milk-bag-invalid-date');
   }
   // Absent unitAbbr means the row is already in the modal's ML unit — only
@@ -48,7 +48,7 @@ export function rowsToBags(rows: UpgradeRowInput[]): MilkBagUpgradeRequest['bags
   const amount = unit && unit !== 'ML' ? convertVolume(r.amount, unit, 'ML') : r.amount;
   return {
    amount,
-     baggedAt: serializeBagDate(r.baggedDate),
+   baggedAt: serializeBagDate(r.baggedDate),
    storageLocation: r.storageLocation ?? DEFAULT_UPGRADE_STORAGE,
    dayNight: r.dayNight,
   };
@@ -61,10 +61,10 @@ export function rowsToBags(rows: UpgradeRowInput[]): MilkBagUpgradeRequest['bags
  * earlier than any moment of day D — emit end-of-day instead.
  */
 function serializeBagDate(d: Date): string {
-  if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0) {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).toISOString();
-  }
-  return d.toISOString();
+ if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).toISOString();
+ }
+ return d.toISOString();
 }
 
 export type UpgradeRunningSum = {
@@ -74,6 +74,8 @@ export type UpgradeRunningSum = {
  leftoverMl: number;
  /** True when the bagged total exceeds the legacy balance (blocked on submit). */
  exceeds: boolean;
+ /** ML by which the bagged total exceeds the legacy balance (0 when not over-sum); drives the overshoot warning copy. */
+ exceededMl: number;
 };
 
 /**
@@ -95,7 +97,7 @@ export function computeUpgradeSum(
   baggedMl += convertVolume(r.amount, unit, 'ML');
  }
  const exceeds = baggedMl > legacyMl;
- return { baggedMl, leftoverMl: exceeds ? 0 : legacyMl - baggedMl, exceeds };
+ return { baggedMl, leftoverMl: exceeds ? 0 : legacyMl - baggedMl, exceeds, exceededMl: exceeds ? baggedMl - legacyMl : 0 };
 }
 
 /**

@@ -5,7 +5,7 @@ import {
   computeBagDayNight,
   validateCreateRequest,
   validateUpdateRequest,
-  convertLegacyToOz,
+  adjustmentDebitMl,
   mapUpgradeInput,
   makeBagTiming,
 } from '@/src/utils/milkBagApi';
@@ -183,20 +183,6 @@ describe('validateUpdateRequest', () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* convertLegacyToOz                                                 */
-/* ------------------------------------------------------------------ */
-
-describe('convertLegacyToOz', () => {
-  it('converts ML to OZ', () => {
-    // 30 ML ≈ 1.01443 oz
-    expect(convertLegacyToOz(30)).toBeCloseTo(1.014, 3);
-  });
-  it('passes through 0', () => {
-    expect(convertLegacyToOz(0)).toBe(0);
-  });
-});
-
-/* ------------------------------------------------------------------ */
 /* mapUpgradeInput                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -252,5 +238,25 @@ describe('makeBagTiming', () => {
     const at = new Date('2026-01-01T00:00:00.000Z');
     const t = makeBagTiming(at, null);
     expect(t.lastLocationChangedAt).toBe(at);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* adjustmentDebitMl                                                 */
+/* ------------------------------------------------------------------ */
+
+describe('adjustmentDebitMl', () => {
+  it('negates the bagged amount when it fits the legacy total', () => {
+    expect(adjustmentDebitMl(300, 500)).toBe(-300);
+  });
+  it('clamps to the legacy total so the balance never goes negative', () => {
+    expect(adjustmentDebitMl(350, 300)).toBe(-300);
+  });
+  it('rounds to 2 decimals for storage', () => {
+    expect(adjustmentDebitMl(100.005 + 18.935871641841512, 500)).toBe(-118.94);
+  });
+  it('returns 0 (never -0) when nothing is debited', () => {
+    expect(adjustmentDebitMl(0, 500)).toBe(0);
+    expect(Object.is(adjustmentDebitMl(0, 500), -0)).toBe(false);
   });
 });

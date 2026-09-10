@@ -1,5 +1,6 @@
 export const inventoryModalStyles = {
   body: 'space-y-4',
+  content: 'overflow-y-auto max-h-[60vh] pr-2',
   empty: 'py-6 text-center text-sm text-gray-500',
   list: 'space-y-3',
   row: 'space-y-2 rounded-xl border border-gray-200 p-3',

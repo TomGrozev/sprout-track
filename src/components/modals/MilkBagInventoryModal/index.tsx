@@ -105,7 +105,7 @@ export function MilkBagInventoryModal({
       title={t('Milk Bag Inventory')}
       description={t('View your stored milk bags and change where each is kept.')}
     >
-      <ModalContent>
+      <ModalContent className={cn(styles.content, 'mbinv-content')}>
         {available.length === 0 ? (
           <p className={cn(styles.empty, 'mbinv-empty')}>{t('No milk bags stored yet')}</p>
         ) : (

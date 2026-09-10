@@ -242,4 +242,64 @@ describe('MilkBagUpgradeModal convert-to-bags serialization', () => {
     expect(serialized.getSeconds()).toBe(59);
     expect(serialized.getMilliseconds()).toBe(999);
   });
+
+  it('shows an overshoot warning + confirm and submits allowExceedsTotal true on proceed', async () => {
+    let upgradeBody: { allowExceedsTotal?: boolean } | null = null;
+
+    const json = (payload: unknown, ok = true) => ({
+      ok,
+      status: ok ? 200 : 400,
+      json: async () => payload,
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+        const u = String(url);
+        if (u.includes('/api/milk-bags/upgrade')) {
+          upgradeBody = JSON.parse(init?.body ?? '{}');
+          return json({ success: true, data: {} });
+        }
+        if (u.includes('/api/breast-milk-balance')) {
+          return json({ success: true, data: { balance: 100 } });
+        }
+        if (u.includes('/api/settings')) {
+          if (init?.method === 'PUT') return json({ success: true, data: {} });
+          return json({ success: true, data: { milkBagSettings: null } });
+        }
+        return json({ success: true, data: {} });
+      })
+    );
+
+    render(
+      <ProvidersWithModal>
+        <MilkBagUpgradeModal open onClose={vi.fn()} babyId="baby-1" onUpgraded={vi.fn()} />
+      </ProvidersWithModal>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Convert to bags/ }));
+    await waitFor(() => {
+      if (screen.queryByText('Loading…')) throw new Error('balance still loading');
+    });
+
+    // Overshoot the 100 ml balance.
+    const amountInput = screen.getByPlaceholderText('0');
+    fireEvent.change(amountInput, { target: { value: '120' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Convert' }));
+
+    // Warning + confirm appears; the leftover confirm must not.
+    expect(await screen.findByText('Your bag total is 20 ml more than your recorded balance')).toBeTruthy();
+    expect(screen.queryByText(/Discard leftover/)).toBeNull();
+
+    // Hard-block is gone: the Convert button still submitted the warning path with no request yet.
+    expect(upgradeBody).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Proceed' }));
+
+    await waitFor(() => {
+      expect(upgradeBody).not.toBeNull();
+    });
+    expect(upgradeBody!.allowExceedsTotal).toBe(true);
+  });
 });
