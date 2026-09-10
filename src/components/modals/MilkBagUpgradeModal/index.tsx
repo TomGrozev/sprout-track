@@ -8,7 +8,6 @@ import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
 import { ToggleGroup } from '@/src/components/ui/toggle-group';
 import { ToggleGroupOption } from '@/src/components/ui/toggle-group/toggle-group.types';
-import { DateTimePicker } from '@/src/components/ui/date-time-picker';
 import { useLocalization } from '@/src/context/localization';
 import { useToast } from '@/src/components/ui/toast';
 import { cn } from '@/src/lib/utils';
@@ -41,12 +40,19 @@ let nextRowId = 1;
 
 import { authHeaders } from '@/src/utils/authHeaders';
 
+/** Snap a Date to local midnight — the DatePicker supplies exactly this. */
+const startOfLocalDay = (d: Date) => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+
 function makeRow(): UpgradeRowState {
   const now = new Date();
   return {
     id: nextRowId++,
     amount: '',
-    baggedAt: now,
+    baggedDate: startOfLocalDay(now),
     storageLocation: 'freezer',
     dayNight: deriveDayNight(now, DEFAULT_DAY_NIGHT_BOUNDARY.dayStartHour, DEFAULT_DAY_NIGHT_BOUNDARY.dayEndHour),
   };
@@ -166,7 +172,7 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
     bags: rowsToBags(
       rows.map((r) => ({
         amount: parseFloat(r.amount),
-        baggedAt: r.baggedAt,
+        baggedDate: r.baggedDate,
         storageLocation: r.storageLocation,
         dayNight: r.dayNight,
         unitAbbr: 'ML',
@@ -218,7 +224,7 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
     if (submitting) return;
     const valid = rows.every((r) => {
       const n = parseFloat(r.amount);
-      return Number.isFinite(n) && n > 0 && r.baggedAt instanceof Date && !Number.isNaN(r.baggedAt.getTime());
+      return Number.isFinite(n) && n > 0 && r.baggedDate instanceof Date && !Number.isNaN(r.baggedDate.getTime());
     });
     if (!valid) {
       showToast({ variant: 'error', title: t('Error'), message: t('Enter a valid amount for each bag'), duration: 5000 });
@@ -254,7 +260,7 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
     bag: t('Bag'),
     remove: t('Remove'),
     amount: t('Amount (ml)'),
-    baggedAt: t('Date and time'),
+    baggedAt: t('Date'),
     storage: t('Storage'),
     dayNight: t('Day / Night'),
   };

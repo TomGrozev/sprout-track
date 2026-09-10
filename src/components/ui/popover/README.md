@@ -72,3 +72,7 @@ The content of the popover that appears when the trigger is clicked.
 ## Styling
 
 The popover uses the app's design system with a clean white background, subtle border, and shadow for depth. It includes smooth animations for a polished user experience.
+
+## Layering inside modals
+
+A popover's content portal renders as a later sibling of the dialog content in the `body`. When a popover is embedded in a modal (e.g. a `DatePicker` inside a form dialog), both the dialog content and the popover land at the same stacking level, so an equal z-index wins only by DOM order — unreliable. Consumers that must appear above the centered dialog content (which sits at `z-[101]`) should use a token one step higher, e.g. `z-[102]` (see the `DatePicker` `datePickerPopoverContentStyles` token).

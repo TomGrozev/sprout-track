@@ -51,6 +51,8 @@ const [open, setOpen] = useState(false);
 
 ## Implementation notes
 
+- The per-bag date field is **date-only** (a `DatePicker`, not a date+time picker, so it fits the modal without overflowing; the popover renders on top via the shared `z-[102]` picker tokens). The field stores a local **midnight** Date, and rows serialize as **end-of-day** (23:59:59.999 local) so expiry comparisons (`baggedAt` + shelf-life vs `Date.now()`) keep the bagged-day meaning correct.
+
 - Day/night defaults on a new row are derived from the bag date with the
   `DEFAULT_DAY_NIGHT_BOUNDARY` (07:00–19:00); the user can override via the
   toggle and the choice is preserved.

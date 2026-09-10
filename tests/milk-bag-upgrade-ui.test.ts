@@ -15,7 +15,7 @@ describe('rowsToBags', () => {
   it('maps valid rows to MilkBagUpgradeRequest bags with ISO dates', () => {
     const at = new Date(2026, 8, 9, 10, 30);
     const bags = rowsToBags([
-      { amount: 120, baggedAt: at, storageLocation: 'fridge', dayNight: day },
+      { amount: 120, baggedDate: at, storageLocation: 'fridge', dayNight: day },
     ]);
     expect(bags).toEqual([
       {
@@ -28,14 +28,14 @@ describe('rowsToBags', () => {
   });
 
   it('defaults storageLocation to freezer when omitted', () => {
-    const bags = rowsToBags([{ amount: 60, baggedAt: new Date(), dayNight: night }]);
+    const bags = rowsToBags([{ amount: 60, baggedDate: new Date(), dayNight: night }]);
     expect(bags[0].storageLocation).toBe(DEFAULT_UPGRADE_STORAGE);
     expect(bags[0].storageLocation).toBe('freezer');
   });
 
   it('converts non-ML amounts to ML when a unitAbbr is set', () => {
     const bags = rowsToBags([
-      { amount: 4, baggedAt: new Date(), dayNight: day, unitAbbr: 'OZ' },
+      { amount: 4, baggedDate: new Date(), dayNight: day, unitAbbr: 'OZ' },
     ]);
     // 4 oz => 4 * 29.5735
     expect(bags[0].amount).toBeCloseTo(4 * 29.5735, 5);
@@ -43,27 +43,39 @@ describe('rowsToBags', () => {
 
   it('keeps ML amounts unchanged', () => {
     const bags = rowsToBags([
-      { amount: 90, baggedAt: new Date(), dayNight: night, unitAbbr: 'ML' },
+      { amount: 90, baggedDate: new Date(), dayNight: night, unitAbbr: 'ML' },
     ]);
     expect(bags[0].amount).toBe(90);
   });
 
   it('rejects non-positive amounts', () => {
     expect(() =>
-      rowsToBags([{ amount: 0, baggedAt: new Date(), dayNight: day }]),
+      rowsToBags([{ amount: 0, baggedDate: new Date(), dayNight: day }]),
     ).toThrow('milk-bag-invalid-amount');
     expect(() =>
-      rowsToBags([{ amount: -5, baggedAt: new Date(), dayNight: day }]),
+      rowsToBags([{ amount: -5, baggedDate: new Date(), dayNight: day }]),
     ).toThrow('milk-bag-invalid-amount');
     expect(() =>
-      rowsToBags([{ amount: NaN, baggedAt: new Date(), dayNight: day }]),
+      rowsToBags([{ amount: NaN, baggedDate: new Date(), dayNight: day }]),
     ).toThrow('milk-bag-invalid-amount');
   });
 
   it('rejects unparseable dates', () => {
     expect(() =>
-      rowsToBags([{ amount: 10, baggedAt: new Date('garbage'), dayNight: day }]),
+      rowsToBags([{ amount: 10, baggedDate: new Date('garbage'), dayNight: day }]),
     ).toThrow('milk-bag-invalid-date');
+  });
+
+  it('serializes a midnight baggedDate as end-of-day (23:59:59.999 local)', () => {
+    const midnight = new Date(2026, 8, 9); // local 00:00
+    const bags = rowsToBags([{ amount: 80, baggedDate: midnight, dayNight: day }]);
+    expect(bags[0].baggedAt).toBe(new Date(2026, 8, 9, 23, 59, 59, 999).toISOString());
+  });
+
+  it('passes a non-midnight baggedDate through unchanged', () => {
+    const at = new Date(2026, 8, 9, 10, 30);
+    const bags = rowsToBags([{ amount: 80, baggedDate: at, dayNight: day }]);
+    expect(bags[0].baggedAt).toBe(at.toISOString());
   });
 });
 

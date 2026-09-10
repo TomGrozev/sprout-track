@@ -5,7 +5,7 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
-import { DateTimePicker } from '@/src/components/ui/date-time-picker';
+import { DatePicker } from '@/src/components/ui/date-picker';
 import { ToggleGroup, type ToggleGroupOption } from '@/src/components/ui/toggle-group';
 import { cn } from '@/src/lib/utils';
 import { upgradeModalStyles as styles } from './milk-bag-upgrade-modal.styles';
@@ -54,7 +54,7 @@ export function UpgradeBagRow({ row, storageOptions, dayNightOptions, onRemove, 
         </div>
         <div className="space-y-1">
           <Label className={cn(styles.fieldLabel, 'mbupgrade-fieldLabel')}>{labels.baggedAt}</Label>
-          <DateTimePicker value={row.baggedAt} onChange={(d) => onUpdate({ baggedAt: d })} />
+          <DatePicker value={row.baggedDate} onChange={(d) => onUpdate({ baggedDate: d })} />
         </div>
       </div>
 

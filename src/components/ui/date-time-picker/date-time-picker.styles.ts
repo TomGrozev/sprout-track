@@ -19,8 +19,9 @@ export const dateTimePickerButtonStyles = cn(
 );
 
 // Popover content styles
-export const dateTimePickerPopoverContentStyles = cn(
-  "p-0 z-[100] border-gray-200 shadow-lg",
+// Popover must layer above the centered dialog content (z-[101]).
+export const dateTimePickerContentStyles = cn(
+  "p-0 z-[102] border-gray-200 shadow-lg",
   "rounded-md overflow-hidden"
 );
 
