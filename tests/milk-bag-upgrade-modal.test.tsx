@@ -165,6 +165,7 @@ describe('MilkBagUpgradeModal convert-to-bags serialization', () => {
   it('labels the bag date as Date (not Date and time) and serializes midnight to end-of-day', async () => {
     // Track the POST body sent to /api/milk-bags/upgrade.
     let upgradeBody: { bags: Array<{ baggedAt: string }> } | null = null;
+   let balanceUrl: string | null = null;
 
     const json = (payload: unknown, ok = true) => ({
       ok,
@@ -181,12 +182,13 @@ describe('MilkBagUpgradeModal convert-to-bags serialization', () => {
           return json({ success: true, data: {} });
         }
         if (u.includes('/api/breast-milk-balance')) {
+     balanceUrl = u;
           // Balance equal to the bagged amount: no leftover-confirm, not exceeding.
           return json({ success: true, data: { balance: 100 } });
         }
         if (u.includes('/api/settings')) {
           if (init?.method === 'PUT') return json({ success: true, data: {} });
-          return json({ success: true, data: { milkBagSettings: null } });
+    return json({ success: true, data: { milkBagSettings: null, defaultBottleUnit: 'OZ' } });
         }
         return json({ success: true, data: {} });
       })
@@ -234,6 +236,10 @@ describe('MilkBagUpgradeModal convert-to-bags serialization', () => {
     ).toISOString();
 
     expect(upgradeBody!.bags[0].baggedAt).toBe(expectedEndOfDay);
+    // Preferred unit from settings (OZ) flows through to the balance fetch and
+    // into every bag's unitAbbr.
+    expect(balanceUrl).toContain('unit=OZ');
+    expect((upgradeBody as unknown as { bags: Array<{ unitAbbr?: string }> }).bags[0].unitAbbr).toBe('OZ');
     // End-of-day is a LOCAL time; toISOString is UTC, so assert the parsed
     // local components rather than a literal (offset-fragile) string suffix.
     const serialized = new Date(upgradeBody!.bags[0].baggedAt);
@@ -265,7 +271,7 @@ describe('MilkBagUpgradeModal convert-to-bags serialization', () => {
         }
         if (u.includes('/api/settings')) {
           if (init?.method === 'PUT') return json({ success: true, data: {} });
-          return json({ success: true, data: { milkBagSettings: null } });
+          return json({ success: true, data: { milkBagSettings: null, defaultBottleUnit: 'OZ' } });
         }
         return json({ success: true, data: {} });
       })
@@ -289,7 +295,7 @@ describe('MilkBagUpgradeModal convert-to-bags serialization', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Convert' }));
 
     // Warning + confirm appears; the leftover confirm must not.
-    expect(await screen.findByText('Your bag total is 20 ml more than your recorded balance')).toBeTruthy();
+    expect(await screen.findByText('Your bag total is 20 oz more than your recorded balance')).toBeTruthy();
     expect(screen.queryByText(/Discard leftover/)).toBeNull();
 
     // Hard-block is gone: the Convert button still submitted the warning path with no request yet.

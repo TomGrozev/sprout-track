@@ -129,14 +129,17 @@ export type ConversionResult =
  | { ok: false; reason: 'exceeds-total' | 'empty-for-nonzero-total' | 'invalid-amount' };
 
 /**
- * Guided convert-to-bags: bag amounts must sum to <= the legacy total. A shortfall
- * is allowed but surfaces leftoverMl so the UI can ask "discard leftover X?"; an
- * overshoot is rejected. The legacy balance then decrements by the bagged amount.
+ * Guided convert-to-bags: bag amounts must sum to <= the legacy total, within an
+ * optional display-precision `toleranceMl` (in ML) that absorbs the float noise of
+ * a round-tripped display unit (e.g. 450.00 ml shown as 15.22 oz). A shortfall is
+ * allowed but surfaces leftoverMl so the UI can ask "discard leftover X?"; an
+ * overshoot beyond the tolerance is rejected (unless `allowExceeds`). The legacy
+ * balance then decrements by the bagged amount.
  */
 export function convertLegacyBalance(
  legacyTotalMl: number,
  bags: LegacyBagInput[],
- opts?: { allowExceeds?: boolean },
+ opts?: { allowExceeds?: boolean; toleranceMl?: number },
 ): ConversionResult {
  if (!Number.isFinite(legacyTotalMl) || legacyTotalMl < 0) return { ok: false, reason: 'invalid-amount' };
  if (bags.length === 0) {
@@ -145,9 +148,11 @@ export function convertLegacyBalance(
  const invalid = bags.find((b) => !Number.isFinite(b.amountMl) || b.amountMl <= 0);
  if (invalid) return { ok: false, reason: 'invalid-amount' };
  const baggedMl = bags.reduce((s, b) => s + b.amountMl, 0);
- if (baggedMl > legacyTotalMl) {
+ const toleranceMl = opts?.toleranceMl ?? 0;
+ if (baggedMl > legacyTotalMl + toleranceMl) {
   if (opts?.allowExceeds) return { ok: true, leftoverMl: 0 };
   return { ok: false, reason: 'exceeds-total' };
  }
- return { ok: true, leftoverMl: legacyTotalMl - baggedMl };
+ const diff = legacyTotalMl - baggedMl;
+ return diff <= toleranceMl ? { ok: true, leftoverMl: 0 } : { ok: true, leftoverMl: diff };
 }

@@ -5,7 +5,7 @@ import {
   computeBagDayNight,
   validateCreateRequest,
   validateUpdateRequest,
-  adjustmentDebitMl,
+  adjustmentDebit,
   mapUpgradeInput,
   makeBagTiming,
 } from '@/src/utils/milkBagApi';
@@ -242,21 +242,21 @@ describe('makeBagTiming', () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* adjustmentDebitMl                                                 */
+/* adjustmentDebit                                                      */
 /* ------------------------------------------------------------------ */
 
-describe('adjustmentDebitMl', () => {
-  it('negates the bagged amount when it fits the legacy total', () => {
-    expect(adjustmentDebitMl(300, 500)).toBe(-300);
+describe('adjustmentDebit', () => {
+  it('negates the (already-clamped) amount in the given unit', () => {
+    expect(adjustmentDebit(300, 'ML')).toBe(-300);
+    expect(adjustmentDebit(2.5, 'OZ')).toBe(-2.5);
   });
-  it('clamps to the legacy total so the balance never goes negative', () => {
-    expect(adjustmentDebitMl(350, 300)).toBe(-300);
-  });
+  // Clamping happens caller-side (min of bagged sum and legacy total); the 2dp
+  // rounding is what guards the raw conversion float shown in the bug report.
   it('rounds to 2 decimals for storage', () => {
-    expect(adjustmentDebitMl(100.005 + 18.935871641841512, 500)).toBe(-118.94);
+    expect(adjustmentDebit(100.005 + 18.935871641841512, 'ML')).toBe(-118.94);
   });
   it('returns 0 (never -0) when nothing is debited', () => {
-    expect(adjustmentDebitMl(0, 500)).toBe(0);
-    expect(Object.is(adjustmentDebitMl(0, 500), -0)).toBe(false);
+    expect(adjustmentDebit(0, 'ML')).toBe(0);
+    expect(Object.is(adjustmentDebit(0, 'ML'), -0)).toBe(false);
   });
 });

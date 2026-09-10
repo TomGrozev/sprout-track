@@ -86,6 +86,8 @@ export type MilkBagUpgradeRequest = {
   storageLocation: StorageLocation; // default freezer
   dayNight?: DayNight; // derived from baggedAt + boundary when omitted
   label?: string | null;
+  /** Stored unit ('OZ' | 'ML'); absent = 'ML' (backward compatible). */
+  unitAbbr?: string;
  }>;
  /** When bags under-sum the legacy total: true records the leftover as discarded. */
  discardLeftover: boolean;

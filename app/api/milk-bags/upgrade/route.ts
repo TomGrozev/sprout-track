@@ -14,11 +14,11 @@ import prisma from '../../db';
 import { withAuthContext, AuthResult } from '../../utils/auth';
 import { toUTC } from '../../utils/timezone';
 import { checkWritePermission } from '../../utils/writeProtection';
-import { rowToMilkBagDTO, computeBagDayNight, mapUpgradeInput, adjustmentDebitMl } from '@/src/utils/milkBagApi';
+import { rowToMilkBagDTO, computeBagDayNight, mapUpgradeInput, adjustmentDebit } from '@/src/utils/milkBagApi';
 import { MilkBagUpgradeRequest, MilkBagsResponse } from '@/src/types/milk-bag';
 import { inventoryTotals, convertLegacyBalance } from '@/src/utils/milk-bag-rules';
 import { loadMilkBagSettings } from '@/src/utils/milk-bag-settings';
-import { toMl } from '@/src/utils/unit-conversion';
+import { toMl, convertVolume, normalizeVolumeUnit, type VolumeUnit } from '@/src/utils/unit-conversion';
 import type { LegacyBagInput } from '@/src/utils/milk-bag-rules';
 import { fetchLegacyBalance } from '../../utils/milkBalance';
 
@@ -61,11 +61,29 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
    return NextResponse.json({ success: false, error: 'No bags specified for conversion.' }, { status: 400 });
   }
 
+  // Normalize per-bag units; an absent unitAbbr means 'ML' (backward compatible).
+  // Unknown units -> 400, mirroring pump-log's normalizeVolumeUnit gate.
+  const bagUnits: (VolumeUnit | null)[] = bagsInput.map((b) => {
+   if (!b.unitAbbr || !b.unitAbbr.trim()) return 'ML';
+   return normalizeVolumeUnit(b.unitAbbr);
+  });
+  if (bagUnits.some((u) => u === null)) {
+   return NextResponse.json({ success: false, error: 'Invalid unit. Supported units are OZ and ML.' }, { status: 400 });
+  }
+  // All bags must share one unit (the modal always sends a single unit).
+  const unit = bagUnits[0] as VolumeUnit;
+  if (bagUnits.some((u) => u !== unit)) {
+   return NextResponse.json({ success: false, error: 'All bags must use the same unit (OZ or ML).' }, { status: 400 });
+  }
+
   // Map to LegacyBagInput for convertLegacyBalance validation
-  const legacyBags: LegacyBagInput[] = mapUpgradeInput(body).bagInput;
+  const legacyBags: LegacyBagInput[] = mapUpgradeInput(body, unit).bagInput;
 
   const conversionResult = convertLegacyBalance(legacyTotalMl, legacyBags, {
    allowExceeds: body.allowExceedsTotal === true,
+   // Half of the last displayed 2dp digit in the user's unit absorbs the float
+   // noise of an OZ round-trip (0.005 ml for ML users ~ preserves exact behavior).
+   toleranceMl: convertVolume(0.005, unit, 'ML'),
   });
   if (!conversionResult.ok) {
    return NextResponse.json(
@@ -98,7 +116,7 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
     const created = await tx.milkBag.create({
      data: {
       babyId, familyId: userFamilyId, caretakerId: caretakerId ?? null,
-      amount: bag.amount, unitAbbr: 'ML', dayNight,
+      amount: bag.amount, unitAbbr: unit, dayNight,
       storageLocation, provenance: 'fresh', startedAt: baggedAt, label: bag.label ?? null,
      },
     });
@@ -107,15 +125,17 @@ async function handlePost(req: NextRequest, authContext: AuthResult) {
 
    // Debit the legacy balance by the bagged amount, clamped to the legacy total so
    // the legacy balance never goes negative (allowExceeds permits a bagged excess
-   // without debiting it). Stored in ML — the unit the whole upgrade flow speaks.
-   const baggedMl = bagsInput.reduce((s: number, b: { amount: number }) => s + b.amount, 0);
-   const debitMl = adjustmentDebitMl(baggedMl, legacyTotalMl);
+   // without debiting it). All figures in `unit` — the resolved display unit — so
+   // the stored adjustment reads in the same unit the bags are tracked in.
+   const baggedInUnit = bagsInput.reduce((s: number, b: { amount: number }) => s + b.amount, 0);
+   const legacyTotalU = convertVolume(legacyTotalMl, 'ML', unit);
+   const debit = adjustmentDebit(Math.min(baggedInUnit, legacyTotalU), unit);
    await tx.breastMilkAdjustment.create({
     data: {
      babyId, familyId: userFamilyId, caretakerId: caretakerId ?? null,
      time: new Date(),
-     amount: debitMl === 0 ? 0 : -debitMl,
-     unitAbbr: 'ML', reason: 'Converted to bags',
+     amount: debit,
+     unitAbbr: unit, reason: 'Converted to bags',
     },
    });
   });

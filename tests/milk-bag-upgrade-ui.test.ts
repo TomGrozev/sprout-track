@@ -32,20 +32,27 @@ describe('rowsToBags', () => {
     expect(bags[0].storageLocation).toBe(DEFAULT_UPGRADE_STORAGE);
     expect(bags[0].storageLocation).toBe('freezer');
   });
-
-  it('converts non-ML amounts to ML when a unitAbbr is set', () => {
+  it('passes the row amount and normalized unitAbbr through unchanged (no conversion)', () => {
     const bags = rowsToBags([
       { amount: 4, baggedDate: new Date(), dayNight: day, unitAbbr: 'OZ' },
     ]);
-    // 4 oz => 4 * 29.5735
-    expect(bags[0].amount).toBeCloseTo(4 * 29.5735, 5);
+    // No conversion happens client-side: amount + normalized unit pass through.
+    expect(bags[0].amount).toBe(4);
+    expect(bags[0].unitAbbr).toBe('OZ');
   });
 
-  it('keeps ML amounts unchanged', () => {
+  it('keeps ML amounts and unitAbbr', () => {
     const bags = rowsToBags([
       { amount: 90, baggedDate: new Date(), dayNight: night, unitAbbr: 'ML' },
     ]);
     expect(bags[0].amount).toBe(90);
+    expect(bags[0].unitAbbr).toBe('ML');
+  });
+
+  it('omits unitAbbr when the row carries none (endpoint defaults to ML)', () => {
+    const bags = rowsToBags([{ amount: 90, baggedDate: new Date(), dayNight: night }]);
+    expect(bags[0].amount).toBe(90);
+    expect('unitAbbr' in bags[0]).toBe(false);
   });
 
   it('rejects non-positive amounts', () => {
@@ -135,6 +142,52 @@ describe('computeUpgradeSum', () => {
     expect(sum.leftoverMl).toBe(0);
     expect(sum.exceededMl).toBe(20);
     expect(sum.baggedMl).toBe(120);
+  });
+
+  it('expresses results in the resolved unit when unit = OZ', () => {
+    const sum = computeUpgradeSum(10, [{ amount: 4, unitAbbr: 'OZ' }], 'OZ', 'OZ');
+    // legacy 10 oz, bagged 4 oz -> 6 oz leftover, no exceed.
+    expect(sum.baggedMl).toBe(4);
+    expect(sum.leftoverMl).toBe(6);
+    expect(sum.exceeds).toBe(false);
+    expect(sum.exceededMl).toBe(0);
+  });
+
+  it('mixed legacy/row units compare in the resolved unit', () => {
+    const sum = computeUpgradeSum(177.1, [{ amount: 6, unitAbbr: 'OZ' }], 'ML', 'OZ');
+    // legacy 177.1 ml ~= 5.988 oz; 6 oz bagged -> exceeds.
+    expect(sum.exceeds).toBe(true);
+    expect(sum.leftoverMl).toBe(0);
+  });
+
+  it('OZ round-trip: legacy 450 ml shown as 15.22 oz bags without exceeds or leftover', () => {
+    const sum = computeUpgradeSum(450, [{ amount: 15.22, unitAbbr: 'OZ' }], 'ML', 'OZ', 0.005);
+    // 15.22 oz exceeds the 15.216 oz legacy by < tolerance -> no overshoot, no leftover.
+    expect(sum.exceeds).toBe(false);
+    expect(sum.leftoverMl).toBe(0);
+    expect(sum.exceededMl).toBe(0);
+  });
+
+  it('tolerance zeroes a within-tolerance shortfall in display units', () => {
+    const sum = computeUpgradeSum(10, [{ amount: 9.998, unitAbbr: 'OZ' }], 'OZ', 'OZ', 0.005);
+    expect(sum.exceeds).toBe(false);
+    expect(sum.leftoverMl).toBe(0);
+  });
+
+  it('tolerance still surfaces a shortfall beyond the tolerance', () => {
+    const sum = computeUpgradeSum(10, [{ amount: 9, unitAbbr: 'OZ' }], 'OZ', 'OZ', 0.005);
+    expect(sum.exceeds).toBe(false);
+    expect(sum.leftoverMl).toBe(1);
+  });
+
+  it('tolerance still flags a genuine excess beyond the tolerance', () => {
+    const sum = computeUpgradeSum(10, [{ amount: 10.01, unitAbbr: 'OZ' }], 'OZ', 'OZ', 0.005);
+    expect(sum.exceeds).toBe(true);
+  });
+
+  it('without tolerance the same tiny excess stays flagged (default unchanged)', () => {
+    const sum = computeUpgradeSum(10, [{ amount: 10.001, unitAbbr: 'OZ' }], 'OZ', 'OZ');
+    expect(sum.exceeds).toBe(true);
   });
 });
 

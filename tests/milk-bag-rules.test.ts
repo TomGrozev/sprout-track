@@ -209,4 +209,40 @@ describe('convertLegacyBalance (guided convert-to-bags math)', () => {
     ]);
     expect(r).toEqual({ ok: false, reason: 'exceeds-total' });
   });
+
+  it('tolerance absorbs a within-tolerance overshoot (ok, zero leftover)', () => {
+    // mirrors legacy 450.00 ml vs bagged 450.02827 ml (an OZ round-trip noise).
+    const r = convertLegacyBalance(450, [
+      { amountMl: 450.02827, baggedAt: new Date(), storageLocation: 'freezer', dayNight: 'day' },
+    ], { toleranceMl: 0.148 });
+    expect(r).toEqual({ ok: true, leftoverMl: 0 });
+  });
+
+  it('tolerance zeroes a within-tolerance shortfall', () => {
+    const r = convertLegacyBalance(450, [
+      { amountMl: 449.99, baggedAt: new Date(), storageLocation: 'freezer', dayNight: 'day' },
+    ], { toleranceMl: 0.148 });
+    expect(r).toEqual({ ok: true, leftoverMl: 0 });
+  });
+
+  it('tolerance still surfaces a shortfall beyond the tolerance', () => {
+    const r = convertLegacyBalance(450, [
+      { amountMl: 400, baggedAt: new Date(), storageLocation: 'freezer', dayNight: 'day' },
+    ], { toleranceMl: 0.148 });
+    expect(r).toEqual({ ok: true, leftoverMl: 50 });
+  });
+
+  it('tolerance still rejects a genuine excess beyond the tolerance', () => {
+    const r = convertLegacyBalance(450, [
+      { amountMl: 450.5, baggedAt: new Date(), storageLocation: 'freezer', dayNight: 'day' },
+    ], { toleranceMl: 0.148 });
+    expect(r).toEqual({ ok: false, reason: 'exceeds-total' });
+  });
+
+  it('without tolerance the same tiny overshoot stays rejected (default unchanged)', () => {
+    const r = convertLegacyBalance(450, [
+      { amountMl: 450.02827, baggedAt: new Date(), storageLocation: 'freezer', dayNight: 'day' },
+    ]);
+    expect(r).toEqual({ ok: false, reason: 'exceeds-total' });
+  });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './milk-bag-upgrade-modal.css';
 import { Modal, ModalContent, ModalFooter } from '@/src/components/ui/modal';
 import { Button } from '@/src/components/ui/button';
@@ -24,6 +24,8 @@ import {
  computeUpgradeSum,
  setUpgradeMarker,
 } from '@/src/utils/milkBagUpgradeUi';
+import { normalizeBottleUnit, readCachedDefaultBottleUnit, cacheDefaultBottleUnit, type BottleUnit } from '@/src/utils/defaultBottleUnit';
+import { convertVolume } from '@/src/utils/unit-conversion';
 import { upgradeModalStyles as styles } from './milk-bag-upgrade-modal.styles';
 import {
  MilkBagUpgradeModalProps,
@@ -71,6 +73,10 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
  const [serverLeftover, setServerLeftover] = useState<number | null>(null);
  const [overshootOpen, setOvershootOpen] = useState(false);
  const [submitting, setSubmitting] = useState(false);
+ /** Resolved display unit (OZ | ML): preferred from settings, cached fallback. Absent until the settings fetch settles. */
+ const [unit, setUnit] = useState<BottleUnit>(() => readCachedDefaultBottleUnit());
+ /** Settled once the settings fetch that resolves the unit completes (or fails). */
+ const unitResolvedPromiseRef = useRef<Promise<BottleUnit> | null>(null);
 
  const reset = () => {
   setScreen('choice');
@@ -82,7 +88,26 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
   setServerLeftover(null);
   setOvershootOpen(false);
   setSubmitting(false);
+  unitResolvedPromiseRef.current = null;
+  setUnit(readCachedDefaultBottleUnit());
  };
+
+  /** Resolve the preferred volume unit: settings default, else localStorage cache. */
+  const resolveUnit = useCallback(async (): Promise<BottleUnit> => {
+   try {
+    const res = await fetch('/api/settings', { cache: 'no-store', headers: authHeaders() });
+    const payload = await res.json();
+    const server = normalizeBottleUnit(payload?.data?.defaultBottleUnit);
+    if (server) cacheDefaultBottleUnit(server);
+    const resolved = server ?? readCachedDefaultBottleUnit();
+    setUnit(resolved);
+    return resolved;
+   } catch {
+    const resolved = readCachedDefaultBottleUnit();
+    setUnit(resolved);
+    return resolved;
+   }
+  }, []);
 
  useEffect(() => {
   if (!open) {
@@ -90,6 +115,10 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
    return;
   }
   if (rows.length === 0) setRows([makeRow()]);
+  // Resolve the preferred unit before any balance fetch, so we never load the wrong unit.
+  if (!unitResolvedPromiseRef.current) {
+   unitResolvedPromiseRef.current = resolveUnit();
+  }
   // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [open]);
 
@@ -113,16 +142,18 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
  const sum = useMemo(() => {
   const parsed = rows.map((r) => ({
    amount: parseFloat(r.amount),
-   unitAbbr: 'ML',
+   unitAbbr: unit,
   }));
-  return computeUpgradeSum(legacyTotal ?? 0, parsed, 'ML');
- }, [rows, legacyTotal]);
+
+  return computeUpgradeSum(legacyTotal ?? 0, parsed, unit, unit, 0.005);
+ }, [rows, legacyTotal, unit]);
 
  const loadBalance = async () => {
   setBalanceLoading(true);
   setBalanceError(null);
   try {
-   const res = await fetch(`/api/breast-milk-balance?babyId=${encodeURIComponent(babyId)}&unit=ML`, {
+   const resolvedUnit = unitResolvedPromiseRef.current ? await unitResolvedPromiseRef.current : unit;
+   const res = await fetch(`/api/breast-milk-balance?babyId=${encodeURIComponent(babyId)}&unit=${resolvedUnit}`, {
     headers: authHeaders(),
    });
    const payload = await res.json();
@@ -177,7 +208,7 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
     baggedDate: r.baggedDate,
     storageLocation: r.storageLocation,
     dayNight: r.dayNight,
-    unitAbbr: 'ML',
+    unitAbbr: unit,
    })),
   ),
   discardLeftover,
@@ -204,8 +235,9 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
 
    // Backend enforces the leftover rule too — re-surface the confirm dialog.
    if (res.status === 409 && payload.error === 'leftover') {
-    const leftoverMl = typeof payload.data?.leftoverMl === 'number' ? payload.data.leftoverMl : sum.leftoverMl;
-    setServerLeftover(leftoverMl);
+   const serverMl = typeof payload.data?.leftoverMl === 'number' ? payload.data.leftoverMl : null;
+   // Server keeps leftover ML-internal; convert to the display unit for the readout.
+   setServerLeftover(serverMl !== null ? convertVolume(serverMl, 'ML', unit) : sum.leftoverMl);
     setConfirmOpen(true);
     return;
    }
@@ -268,7 +300,7 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
  const rowLabels = {
   bag: t('Bag'),
   remove: t('Remove'),
-  amount: t('Amount (ml)'),
+  amount: t('Amount') + ` (${unit.toLowerCase()})`,
   baggedAt: t('Date'),
   storage: t('Storage'),
   dayNight: t('Day / Night'),
@@ -298,7 +330,7 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
       <div className={cn(styles.balanceRow, 'mbupgrade-balanceRow')}>
        <span className={cn(styles.balanceLabel, 'mbupgrade-balanceLabel')}>{t('Legacy balance')}</span>
        <span className={cn(styles.balanceValue, 'mbupgrade-balanceValue')}>
-        {balanceLoading ? t('Loading…') : balanceError ? t('Unavailable') : `${legacyTotal ?? 0} ml`}
+        {balanceLoading ? t('Loading…') : balanceError ? t('Unavailable') : `${legacyTotal ?? 0} ${unit.toLowerCase()}`}
        </span>
       </div>
 
@@ -331,18 +363,18 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
 
       <div className={cn(styles.readout, 'mbupgrade-readout')}>
        <span className={cn(styles.balanceLabel, 'mbupgrade-balanceLabel')}>{t('Bagged')}</span>
-       <span className={cn(styles.readoutValue, 'mbupgrade-readoutValue')}>{Math.round(sum.baggedMl)} ml</span>
+       <span className={cn(styles.readoutValue, 'mbupgrade-readoutValue')}>{Math.round(sum.baggedMl)} {unit.toLowerCase()}</span>
       </div>
       <div className={cn(styles.readout, 'mbupgrade-readout')}>
        <span className={cn(styles.balanceLabel, 'mbupgrade-balanceLabel')}>{t('Leftover')}</span>
-       <span className={cn(styles.readoutValue, 'mbupgrade-readoutValue')}>{Math.round(sum.leftoverMl)} ml</span>
+       <span className={cn(styles.readoutValue, 'mbupgrade-readoutValue')}>{Math.round(sum.leftoverMl)} {unit.toLowerCase()}</span>
       </div>
       {sum.exceeds && <p className={styles.warn}>{t('The bagged amount exceeds your balance')}</p>}
 
       {confirmOpen && (
        <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
         <p className="text-sm font-medium text-amber-900">
-         {t('Discard leftover {amount} ml?').replace('{amount}', String(Math.round(leftoverToConfirm)))}
+         {t('Discard leftover {amount} {unit}?').replace('{amount}', String(Math.round(leftoverToConfirm))).replace('{unit}', unit.toLowerCase())}
         </p>
         <p className="text-xs text-amber-800">
          {t('The leftover balance will be recorded as discarded and can no longer be bagged.')}
@@ -360,7 +392,7 @@ export function MilkBagUpgradeModal({ open, onClose, babyId, onUpgraded }: MilkB
       {overshootOpen && (
        <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
         <p className="text-sm font-medium text-amber-900">
-         {t('Your bag total is {amount} ml more than your recorded balance').replace('{amount}', String(Math.round(sum.exceededMl)))}
+         {t('Your bag total is {amount} {unit} more than your recorded balance').replace('{amount}', String(Math.round(sum.exceededMl))).replace('{unit}', unit.toLowerCase())}
         </p>
         <p className="text-xs text-amber-800">
          {t('Bags can still record more than your balance if you want to. The extra amount will not reduce your balance further.')}

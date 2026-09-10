@@ -4,14 +4,14 @@
  * Keeps the guided convert-to-bags flow testable in the node-env Vitest setup:
  * - `rowsToBags` validates + maps the modal's row state to `MilkBagUpgradeRequest['bags']`.
  * - `computeUpgradeSum` mirrors `convertLegacyBalance` client-side for the live
- *   leftover readout (as ML, matching the ML-based backend semantics).
+ *   leftover readout, in the resolved display unit (`unit`).
  * - `setUpgradeMarker` merges the upgrade marker into the family's
  *   `Settings.milkBagSettings` JSON blob without dropping unknown keys.
  */
 import type { MilkBagUpgradeRequest } from '@/src/types/milk-bag';
 import type { StorageLocation } from '@/src/utils/milk-storage';
 import type { DayNight } from '@/src/utils/milk-bag-rules';
-import { convertVolume, normalizeVolumeUnit } from '@/src/utils/unit-conversion';
+import { convertVolume, normalizeVolumeUnit, type VolumeUnit } from '@/src/utils/unit-conversion';
 import { mergeMilkBagBlob } from '@/src/utils/milkBagSettingsUi';
 
 /** Default storage when adding a bag row (matches the backend default). */
@@ -31,8 +31,9 @@ export type UpgradeRowInput = {
 /**
  * Validate + map convert-dialog rows into `MilkBagUpgradeRequest['bags']`.
  * Non-finite/<=0 amounts and unparseable dates are rejected (throw), since the
- * request must never carry a malformed bag. Amounts are normalised to ML once a
- * row carries a non-ML `unitAbbr` — the upgrade endpoint consumes ML.
+ * request must never carry a malformed bag. No conversion happens here — each
+ * row's `amount` passes through unchanged alongside its normalized `unitAbbr`
+ * (absent = 'ML', the endpoint default), so the backend handles conversion.
  */
 export function rowsToBags(rows: UpgradeRowInput[]): MilkBagUpgradeRequest['bags'] {
  return rows.map((r) => {
@@ -42,15 +43,13 @@ export function rowsToBags(rows: UpgradeRowInput[]): MilkBagUpgradeRequest['bags
   if (!(r.baggedDate instanceof Date) || Number.isNaN(r.baggedDate.getTime())) {
    throw new Error('milk-bag-invalid-date');
   }
-  // Absent unitAbbr means the row is already in the modal's ML unit — only
-  // convert when the row explicitly carries a non-ML unit.
-  const unit = r.unitAbbr ? normalizeVolumeUnit(r.unitAbbr) : 'ML';
-  const amount = unit && unit !== 'ML' ? convertVolume(r.amount, unit, 'ML') : r.amount;
+  const unitAbbr = r.unitAbbr ? (normalizeVolumeUnit(r.unitAbbr) ?? 'ML') : undefined;
   return {
-   amount,
+   amount: r.amount,
    baggedAt: serializeBagDate(r.baggedDate),
    storageLocation: r.storageLocation ?? DEFAULT_UPGRADE_STORAGE,
    dayNight: r.dayNight,
+   ...(unitAbbr ? { unitAbbr } : {}),
   };
  });
 }
@@ -68,36 +67,47 @@ function serializeBagDate(d: Date): string {
 }
 
 export type UpgradeRunningSum = {
- /** Total bagged volume in ML. */
+ /** Total bagged volume in the resolved display unit (`unit`). */
  baggedMl: number;
- /** Remaining legacy balance not yet bagged (ML); 0 when the bags over-sum. */
+ /** Remaining legacy balance not yet bagged (in `unit`); 0 when the bags over-sum. */
  leftoverMl: number;
  /** True when the bagged total exceeds the legacy balance (blocked on submit). */
  exceeds: boolean;
- /** ML by which the bagged total exceeds the legacy balance (0 when not over-sum); drives the overshoot warning copy. */
+ /** Amount in `unit` by which the bagged total exceeds the legacy balance (0 when not over-sum); drives the overshoot warning copy. */
  exceededMl: number;
 };
 
 /**
- * Client-side mirror of `convertLegacyBalance` for the live readout: sums the
- * bagged amounts (each converted to ML when it carries a `unitAbbr`) against a
- * legacy total given in `legacyUnit`. `legacyTotal`/`unitAbbr` round-tripping
- * through `convertVolume` keeps every figure in ML for a single-unit readout.
+ * Client-side mirror of `convertLegacyBalance` for the live readout. Treats each
+ * row amount as already in `unit` (per-row `unitAbbr` overrides) and compares the
+ * sum against a legacy total given in `legacyUnit`, converting both into the
+ * modal's resolved display `unit` via `convertVolume`. Every returned figure is
+ * expressed in `unit`. A `tolerance` (in `unit`, default 0) mirrors the backend
+ * `toleranceMl`, absorbing the float noise of a round-tripped display unit so an
+ * exact visual OZ match isn't reported as an overshoot or a leftover.
  */
 export function computeUpgradeSum(
  legacyTotal: number,
  rows: Array<{ amount: number; unitAbbr?: string | null }>,
- legacyUnit = 'ML',
+ legacyUnit: VolumeUnit = 'ML',
+ unit: VolumeUnit = 'ML',
+ tolerance = 0,
 ): UpgradeRunningSum {
- const legacyMl = convertVolume(Number.isFinite(legacyTotal) && legacyTotal > 0 ? legacyTotal : 0, legacyUnit, 'ML');
- let baggedMl = 0;
+ const legacyInUnit = convertVolume(Number.isFinite(legacyTotal) && legacyTotal > 0 ? legacyTotal : 0, legacyUnit, unit);
+ let bagged = 0;
  for (const r of rows) {
   if (!Number.isFinite(r.amount) || r.amount <= 0) continue;
-  const unit = r.unitAbbr ? (normalizeVolumeUnit(r.unitAbbr) ?? 'ML') : 'ML';
-  baggedMl += convertVolume(r.amount, unit, 'ML');
+  const rowUnit = r.unitAbbr ? (normalizeVolumeUnit(r.unitAbbr) ?? unit) : unit;
+  bagged += convertVolume(r.amount, rowUnit, unit);
  }
- const exceeds = baggedMl > legacyMl;
- return { baggedMl, leftoverMl: exceeds ? 0 : legacyMl - baggedMl, exceeds, exceededMl: exceeds ? baggedMl - legacyMl : 0 };
+ const exceeds = bagged > legacyInUnit + tolerance;
+ const diff = legacyInUnit - bagged;
+ return {
+  baggedMl: bagged,
+  leftoverMl: exceeds ? 0 : diff <= tolerance ? 0 : diff,
+  exceeds,
+  exceededMl: exceeds ? bagged - legacyInUnit : 0,
+ };
 }
 
 /**

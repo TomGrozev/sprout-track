@@ -9,6 +9,7 @@ import type { DayNight } from '@/src/utils/milk-bag-rules';
 import { deriveDayNight, DEFAULT_DAY_NIGHT_BOUNDARY, convertLegacyBalance, type LegacyBagInput, type ConversionResult } from '@/src/utils/milk-bag-rules';
 import { DEFAULT_FREEZER_TYPE } from '@/src/utils/milk-storage';
 import { loadMilkBagSettings } from '@/src/utils/milk-bag-settings';
+import { convertVolume, type VolumeUnit } from '@/src/utils/unit-conversion';
 
 /* ------------------------------------------------------------------ */
 
@@ -119,17 +120,18 @@ export function validateCreateRequest(req: MilkBagCreateRequest): CreateValidati
  */
 export function mapUpgradeInput(
  req: MilkBagUpgradeRequest,
+ unit: VolumeUnit = 'ML',
 ): { bagInput: LegacyBagInput[]; conversionArg: LegacyBagInput[] } {
  return {
   bagInput: req.bags.map((b) => ({
-   amountMl: b.amount,
+   amountMl: convertVolume(b.amount, unit, 'ML'),
    baggedAt: new Date(b.baggedAt),
    storageLocation: b.storageLocation,
    dayNight: b.dayNight ?? 'day',
   })),
   // alias so the returned array can be passed directly to convertLegacyBalance
   conversionArg: req.bags.map((b) => ({
-   amountMl: b.amount,
+   amountMl: convertVolume(b.amount, unit, 'ML'),
    baggedAt: new Date(b.baggedAt),
    storageLocation: b.storageLocation,
    dayNight: b.dayNight ?? 'day',
@@ -138,14 +140,15 @@ export function mapUpgradeInput(
 }
 
 /**
- * The 'Converted to bags' BreastMilkAdjustment debit, in ML (the unit the
- * whole upgrade flow speaks — no OZ conversion, so no conversion float).
- * Clamped to the legacy total so the balance never goes negative when the
- * user overrides the overshoot warning, rounded to 2 decimals for storage.
+ * The 'Converted to bags' BreastMilkAdjustment debit, in `unit` (the unit the
+ * whole upgrade flow resolves to — stored as-is on the record). The caller
+ * passes the already-clamped base (min of the bagged sum and the legacy total,
+ * both in `unit`), so the legacy balance never goes negative when the user
+ * overrides the overshoot warning. Rounded to 2 decimals for storage and never
+ * returns -0.
  */
-export function adjustmentDebitMl(baggedMl: number, legacyTotalMl: number): number {
- const clamped = Math.min(baggedMl, legacyTotalMl);
- const rounded = Math.round(clamped * 100) / 100;
+export function adjustmentDebit(amount: number, unit: VolumeUnit): number {
+ const rounded = Math.round(amount * 100) / 100;
  return rounded === 0 ? 0 : -rounded;
 }
 
